@@ -1,0 +1,59 @@
+{
+  "format": 1,
+  "restore": {
+    "D:\\GAMES\\EscapeFromTarkovV4.0.11\\Developer\\mods to update\\CameraRotationMod\\CameraRotationMod.csproj": {}
+  },
+  "projects": {
+    "D:\\GAMES\\EscapeFromTarkovV4.0.11\\Developer\\mods to update\\CameraRotationMod\\CameraRotationMod.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\GAMES\\EscapeFromTarkovV4.0.11\\Developer\\mods to update\\CameraRotationMod\\CameraRotationMod.csproj",
+        "projectName": "CameraRotationMod",
+        "projectPath": "D:\\GAMES\\EscapeFromTarkovV4.0.11\\Developer\\mods to update\\CameraRotationMod\\CameraRotationMod.csproj",
+        "packagesPath": "C:\\Users\\serha\\.nuget\\packages\\",
+        "outputPath": "D:\\GAMES\\EscapeFromTarkovV4.0.11\\Developer\\mods to update\\CameraRotationMod\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\serha\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net472"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net472": {
+            "targetAlias": "net472",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net472": {
+          "targetAlias": "net472",
+          "dependencies": {
+            "Microsoft.NETFramework.ReferenceAssemblies": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[1.0.3, )",
+              "autoReferenced": true
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.310\\RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

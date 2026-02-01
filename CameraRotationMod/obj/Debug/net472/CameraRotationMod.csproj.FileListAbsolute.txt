@@ -1,0 +1,23 @@
+C:\Users\serha\Desktop\CameraRotationMod\obj\Debug\net472\CameraRotationMod.csproj.AssemblyReference.cache
+C:\Users\serha\Desktop\CameraRotationMod\obj\Debug\net472\CameraRotationMod.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\serha\Desktop\CameraRotationMod\obj\Debug\net472\CameraRotationMod.AssemblyInfoInputs.cache
+C:\Users\serha\Desktop\CameraRotationMod\obj\Debug\net472\CameraRotationMod.AssemblyInfo.cs
+C:\Users\serha\Desktop\CameraRotationMod\obj\Debug\net472\CameraRotationMod.csproj.CoreCompileInputs.cache
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\bin\Debug\net472\CameraRotationMod.dll
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\bin\Debug\net472\CameraRotationMod.pdb
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\obj\Debug\net472\CameraRotationMod.csproj.AssemblyReference.cache
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\obj\Debug\net472\CameraRotationMod.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\obj\Debug\net472\CameraRotationMod.AssemblyInfoInputs.cache
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\obj\Debug\net472\CameraRotationMod.AssemblyInfo.cs
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\obj\Debug\net472\CameraRotationMod.csproj.CoreCompileInputs.cache
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\obj\Debug\net472\CameraRotationMod.dll
+C:\Users\serha\Desktop\Dosyalar\mods\stance\2\CameraRotationMod\obj\Debug\net472\CameraRotationMod.pdb
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\obj\Debug\net472\CameraRotationMod.csproj.AssemblyReference.cache
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\obj\Debug\net472\CameraRotationMod.GeneratedMSBuildEditorConfig.editorconfig
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\obj\Debug\net472\CameraRotationMod.AssemblyInfoInputs.cache
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\obj\Debug\net472\CameraRotationMod.AssemblyInfo.cs
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\obj\Debug\net472\CameraRotationMod.csproj.CoreCompileInputs.cache
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\obj\Debug\net472\CameraRotationMod.dll
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\obj\Debug\net472\CameraRotationMod.pdb
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\bin\Debug\net472\CameraRotationMod.dll
+D:\GAMES\EscapeFromTarkovV4.0.11\Developer\mods to update\CameraRotationMod\bin\Debug\net472\CameraRotationMod.pdb
