@@ -1,0 +1,1 @@
+# stancesAndCameraPositionSPT4.0.11
