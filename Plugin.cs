@@ -1,8 +1,6 @@
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using System;
-using CameraRotationMod.Events;
 using CameraRotationMod.Patches;
 using UnityEngine;
 
@@ -35,13 +33,11 @@ public class Plugin : BaseUnityPlugin
 
     // Stance 1 position and rotation
     private const string Stance1HandsRotations = "Stance 1 Hands/Arms Rotations";
-    public static ConfigEntry<bool> _Stance1HandsRotationEnabled;
     public static ConfigEntry<float> _Stance1HandsPitchRotation; // X-axis
     public static ConfigEntry<float> _Stance1HandsYawRotation;   // Y-axis
     public static ConfigEntry<float> _Stance1HandsRollRotation;  // Z-axis
 
     private const string Stance1HandsPositions = "Stance 1 Hands/Arms Positions";
-    public static ConfigEntry<bool> _Stance1HandsPositionEnabled;
     public static ConfigEntry<float> _Stance1HandsForwardBackwardOffset; // Z-axis
     public static ConfigEntry<float> _Stance1HandsUpDownOffset;          // Y-axis
     public static ConfigEntry<float> _Stance1HandsSidewaysOffset;        // X-axis
@@ -52,13 +48,11 @@ public class Plugin : BaseUnityPlugin
 
     // Stance 2 position and rotation
     private const string Stance2HandsRotations = "Stance 2 Hands/Arms Rotations";
-    public static ConfigEntry<bool> _Stance2HandsRotationEnabled;
     public static ConfigEntry<float> _Stance2HandsPitchRotation; // X-axis
     public static ConfigEntry<float> _Stance2HandsYawRotation;   // Y-axis
     public static ConfigEntry<float> _Stance2HandsRollRotation;  // Z-axis
 
     private const string Stance2HandsPositions = "Stance 2 Hands/Arms Positions";
-    public static ConfigEntry<bool> _Stance2HandsPositionEnabled;
     public static ConfigEntry<float> _Stance2HandsForwardBackwardOffset; // Z-axis
     public static ConfigEntry<float> _Stance2HandsUpDownOffset;          // Y-axis
     public static ConfigEntry<float> _Stance2HandsSidewaysOffset;        // X-axis
@@ -69,13 +63,11 @@ public class Plugin : BaseUnityPlugin
 
     // Stance 3 position and rotation
     private const string Stance3HandsRotations = "Stance 3 Hands/Arms Rotations";
-    public static ConfigEntry<bool> _Stance3HandsRotationEnabled;
     public static ConfigEntry<float> _Stance3HandsPitchRotation; // X-axis
     public static ConfigEntry<float> _Stance3HandsYawRotation;   // Y-axis
     public static ConfigEntry<float> _Stance3HandsRollRotation;  // Z-axis
 
     private const string Stance3HandsPositions = "Stance 3 Hands/Arms Positions";
-    public static ConfigEntry<bool> _Stance3HandsPositionEnabled;
     public static ConfigEntry<float> _Stance3HandsForwardBackwardOffset; // Z-axis
     public static ConfigEntry<float> _Stance3HandsUpDownOffset;          // Y-axis
     public static ConfigEntry<float> _Stance3HandsSidewaysOffset;        // X-axis
@@ -110,11 +102,8 @@ public class Plugin : BaseUnityPlugin
         Logger.LogInfo($"Camera Rotation Mod has loaded!");
 
         // Enable patches
-        new PlayerSpringPatch().Enable(); // Handles camera position by setting CameraPosition.Zero
-        //new SetItemInHandsPatch().Enable(); // DEPRECATED - Old stance system, replaced by SpringGetPatch
-        //new IsAimingPatch().Enable(); // DISABLED - ADS FOV feature removed to prevent conflicts
-        //new UpdateWeaponVariablesPatch().Enable(); // Disabled - using SpringGetPatch instead
-        new SpringGetPatch().Enable(); // Intercept Spring.Get() for stance system (hands only)
+        new PlayerSpringPatch().Enable(); // Handles camera position
+        new SpringGetPatch().Enable(); // Handles stance rotation/position transitions
 
         // Configuration settings
         _PositionEnabled = Config.Bind(
@@ -127,14 +116,17 @@ public class Plugin : BaseUnityPlugin
             Settings,
             "Reset Positions When Aiming",
             true,
-            new ConfigDescription("When enabled, smoothly transitions all positions to defaults when ADS"));
+            new ConfigDescription("When enabled, smoothly transitions all positions to defaults when ADS",
+            null,
+            new ConfigurationManagerAttributes { IsAdvanced = true }));
 
         _ADSTransitionSpeed = Config.Bind(
             Settings,
             "ADS Transition Speed",
-            0.5f,
-            new ConfigDescription("How quickly hands transition between hip-fire and ADS positions. Higher = faster/snappier, Lower = slower/smoother. Recommended: 3-10",
-            new AcceptableValueRange<float>(0.5f, 20f)));
+            2f,
+            new ConfigDescription("How quickly hands transition between stance and ADS positions. 1 = slow, 2 = normal, 3+ = fast/snappy.",
+            new AcceptableValueRange<float>(0.5f, 5f),
+            new ConfigurationManagerAttributes { IsAdvanced = true }));
 
         _StanceToggleKey = Config.Bind(
             Settings,
@@ -293,18 +285,6 @@ public class Plugin : BaseUnityPlugin
             new ConfigurationManagerAttributes { IsAdvanced = true, Order = 1 }));
 
         // Stance 1 Hands Rotation and Position
-        _Stance1HandsRotationEnabled = Config.Bind(
-            Settings,
-            "Enable Stance 1 Hands/Arms Rotation",
-            true,
-            new ConfigDescription("Enable or disable stance 1 hands/arms rotation adjustments"));
-
-        _Stance1HandsPositionEnabled = Config.Bind(
-            Settings,
-            "Enable Stance 1 Hands/Arms Position",
-            true,
-            new ConfigDescription("Enable or disable stance 1 hands/arms position adjustments"));
-
         _Stance1HandsPitchRotation = Config.Bind(
             Stance1HandsRotations,
             "Stance 1 Hands Pitch (X-Axis)",
@@ -361,18 +341,6 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("When enabled, uses a compact sprint animation when sprinting in Stance 1 (tac sprint style)"));
 
         // Stance 2 Hands Rotation and Position
-        _Stance2HandsRotationEnabled = Config.Bind(
-            Settings,
-            "Enable Stance 2 Hands/Arms Rotation",
-            true,
-            new ConfigDescription("Enable or disable stance 2 hands/arms rotation adjustments"));
-
-        _Stance2HandsPositionEnabled = Config.Bind(
-            Settings,
-            "Enable Stance 2 Hands/Arms Position",
-            true,
-            new ConfigDescription("Enable or disable stance 2 hands/arms position adjustments"));
-
         _Stance2HandsPitchRotation = Config.Bind(
             Stance2HandsRotations,
             "Stance 2 Hands Pitch (X-Axis)",
@@ -429,18 +397,6 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("When enabled, uses a compact sprint animation when sprinting in Stance 2 (tac sprint style)"));
 
         // Stance 3 Hands Rotation and Position
-        _Stance3HandsRotationEnabled = Config.Bind(
-            Settings,
-            "Enable Stance 3 Hands/Arms Rotation",
-            true,
-            new ConfigDescription("Enable or disable stance 3 hands/arms rotation adjustments"));
-
-        _Stance3HandsPositionEnabled = Config.Bind(
-            Settings,
-            "Enable Stance 3 Hands/Arms Position",
-            true,
-            new ConfigDescription("Enable or disable stance 3 hands/arms position adjustments"));
-
         _Stance3HandsPitchRotation = Config.Bind(
             Stance3HandsRotations,
             "Stance 3 Hands Pitch (X-Axis)",

@@ -11,6 +11,7 @@ namespace CameraRotationMod.Patches
     /// <summary>
     /// Patch Spring.Get() to add our custom offset to the return value with smooth spring-based transitions
     /// Handles both ADS transitions and Stance toggling with independent spring physics
+    /// Uses true spring physics with configurable damping for overshoot control
     /// </summary>
     public class SpringGetPatch : ModulePatch
     {
@@ -28,16 +29,36 @@ namespace CameraRotationMod.Patches
         private static Vector3 _targetPosition = Vector3.zero;
         private static Vector3 _positionVelocity = Vector3.zero;
         
-        // Spring physics parameters (calculated each frame based on transition speed)
-        private static float _springStiffness = 150f;
-        private static float _springDamping = 10f;
-        
         protected override MethodBase GetTargetMethod()
         {
             return AccessTools.Method(typeof(Spring), nameof(Spring.Get));
         }
-
-        private static int _debugFrameCounter = 0;
+        
+        /// <summary>
+        /// Custom spring physics with configurable stiffness and damping
+        /// Lower damping = more overshoot/oscillation
+        /// Higher damping = less overshoot, slower settling
+        /// Critical damping = sqrt(4 * stiffness) for no overshoot
+        /// </summary>
+        private static Vector3 SpringDamp(Vector3 current, Vector3 target, ref Vector3 velocity, 
+            float stiffness, float damping, float deltaTime)
+        {
+            // Spring force: F = -k * (current - target)
+            Vector3 displacement = current - target;
+            Vector3 springForce = -stiffness * displacement;
+            
+            // Damping force: F = -c * velocity
+            Vector3 dampingForce = -damping * velocity;
+            
+            // Total acceleration (assuming mass = 1)
+            Vector3 acceleration = springForce + dampingForce;
+            
+            // Semi-implicit Euler integration (more stable than explicit Euler)
+            velocity += acceleration * deltaTime;
+            current += velocity * deltaTime;
+            
+            return current;
+        }
         
         [PatchPostfix]
         private static void PatchPostfix(Spring __instance, ref Vector3 __result)
@@ -60,20 +81,15 @@ namespace CameraRotationMod.Patches
             
             // Check if any features are actually enabled
             bool resetOnADSEnabled = Plugin._ResetOnADS?.Value ?? false;
-            bool stance1RotationEnabled = Plugin._Stance1HandsRotationEnabled?.Value ?? false;
-            bool stance1PositionEnabled = Plugin._Stance1HandsPositionEnabled?.Value ?? false;
-            bool stance2RotationEnabled = Plugin._Stance2HandsRotationEnabled?.Value ?? false;
-            bool stance2PositionEnabled = Plugin._Stance2HandsPositionEnabled?.Value ?? false;
-            bool stance3RotationEnabled = Plugin._Stance3HandsRotationEnabled?.Value ?? false;
-            bool stance3PositionEnabled = Plugin._Stance3HandsPositionEnabled?.Value ?? false;
             bool defaultPositionEnabled = Plugin._DefaultHandsPositionEnabled?.Value ?? false;
             
             bool isAiming = pwa.IsAiming;
             
             // Check if ANY feature is enabled that could potentially affect this spring
-            // We need to run spring physics even when transitioning FROM disabled states
-            bool anyRotationFeatureEnabled = stance1RotationEnabled || stance2RotationEnabled || stance3RotationEnabled || resetOnADSEnabled;
-            bool anyPositionFeatureEnabled = stance1PositionEnabled || stance2PositionEnabled || stance3PositionEnabled || defaultPositionEnabled || resetOnADSEnabled;
+            // Stances are always enabled when in stance mode, so check if we're in a stance
+            bool isInAnyStance = StanceManager.IsInStance;
+            bool anyRotationFeatureEnabled = isInAnyStance || resetOnADSEnabled;
+            bool anyPositionFeatureEnabled = isInAnyStance || defaultPositionEnabled || resetOnADSEnabled;
             
             // Early exit only if NO features are enabled at all
             if (isRotationSpring && !anyRotationFeatureEnabled)
@@ -94,11 +110,11 @@ namespace CameraRotationMod.Patches
             // Detect state changes (ADS or Stance toggle) to reinitialize spring
             bool stateChanged = (isAiming != _wasAiming) || (isInStance != _wasInStance);
             
-            // Determine which transition speed to use based on current state (not state changes)
-            // If we're in ADS, use ADS speed. Otherwise use stance speed.
-            float transitionSpeed = (isAiming && resetOnADSEnabled) ? 
-                (Plugin._ADSTransitionSpeed?.Value ?? 5f) : 
-                (Plugin._StanceTransitionSpeed?.Value ?? 5f);
+            // Calculate spring physics from ADS transition speed
+            // Speed 1 = stiffness 75, Speed 2 = stiffness 150, Speed 3 = stiffness 300
+            float transitionSpeed = Plugin._ADSTransitionSpeed?.Value ?? 2f;
+            float stiffness = transitionSpeed * 75f;
+            float damping = 50f; // Fixed damping for smooth stop without overshoot
             
             // ALWAYS update targets to match desired state (for real-time slider adjustments)
             _targetRotation = desiredRotation;
@@ -115,31 +131,9 @@ namespace CameraRotationMod.Patches
                     _positionVelocity = Vector3.zero;
                     _isInitialized = true;
                 }
-                else
-                {
-                    // State changed - give spring initial velocity to prevent snapping
-                    // Calculate displacement from current position to new target
-                    Vector3 rotDisplacement = _targetRotation - _currentRotation;
-                    Vector3 posDisplacement = _targetPosition - _currentPosition;
-                    
-                    // Only set velocity if there's actual displacement (avoid zero/zero)
-                    if (rotDisplacement.magnitude > 0.001f || posDisplacement.magnitude > 0.001f)
-                    {
-                        // Initialize velocity proportional to displacement and transition speed
-                        float velocityMultiplier = transitionSpeed * 3f;
-                        _rotationVelocity = rotDisplacement * velocityMultiplier;
-                        _positionVelocity = posDisplacement * velocityMultiplier;
-                    }
-                    else
-                    {
-                        // Current already at target - spring has converged, reset to start smoothly from here
-                        // Current already at target - spring has converged, reset to start smoothly from here
-                        _currentRotation = Vector3.zero;
-                        _currentPosition = Vector3.zero;
-                        _rotationVelocity = desiredRotation * transitionSpeed * 3f;
-                        _positionVelocity = desiredPosition * transitionSpeed * 3f;
-                    }
-                }
+                // else: State changed but already initialized
+                // Let spring physics handle the transition naturally
+                // Existing velocity is preserved for momentum
                 
                 _wasAiming = isAiming;
                 _wasInStance = isInStance;
@@ -147,47 +141,22 @@ namespace CameraRotationMod.Patches
             
             float deltaTime = Time.deltaTime;
             
-            // Calculate spring stiffness and damping based on transition speed
-            // Higher transition speed = stiffer spring = faster motion
-            _springStiffness = transitionSpeed * 30f;
-            _springDamping = Mathf.Sqrt(_springStiffness) * 2f; // Critical damping for smooth motion
+            // Clamp deltaTime to prevent huge jumps on lag spikes
+            deltaTime = Mathf.Min(deltaTime, 0.05f); // Max 50ms step
             
-            // Spring physics for rotation
-            Vector3 rotationDisplacement = _targetRotation - _currentRotation;
-            Vector3 rotationSpringForce = rotationDisplacement * _springStiffness;
-            Vector3 rotationDampingForce = _rotationVelocity * _springDamping;
-            Vector3 rotationAcceleration = rotationSpringForce - rotationDampingForce;
-            
-            _rotationVelocity += rotationAcceleration * deltaTime;
-            _currentRotation += _rotationVelocity * deltaTime;
-            
-            // Spring physics for position
-            Vector3 positionDisplacement = _targetPosition - _currentPosition;
-            Vector3 positionSpringForce = positionDisplacement * _springStiffness;
-            Vector3 positionDampingForce = _positionVelocity * _springDamping;
-            Vector3 positionAcceleration = positionSpringForce - positionDampingForce;
-            
-            _positionVelocity += positionAcceleration * deltaTime;
-            _currentPosition += _positionVelocity * deltaTime;
+            // Use custom spring physics with configurable damping
+            _currentRotation = SpringDamp(_currentRotation, _targetRotation, ref _rotationVelocity, stiffness, damping, deltaTime);
+            _currentPosition = SpringDamp(_currentPosition, _targetPosition, ref _positionVelocity, stiffness, damping, deltaTime);
 
             // Apply the spring-simulated values based on which spring this is
+            // Always apply offset - removed threshold check to prevent snap/flicker at end of transition
             if (isRotationSpring)
             {
-                // Only add offset if it's non-zero (avoid interfering with game's ADS detection)
-                if (_currentRotation.sqrMagnitude > 0.0001f)
-                {
-                    __result = _currentRotation + __instance.Current;
-                }
-                // else: leave __result unchanged - spring returns its natural value
+                __result = _currentRotation + __instance.Current;
             }
             else if (isPositionSpring)
             {
-                // Only add offset if it's non-zero (avoid interfering with game's ADS detection)
-                if (_currentPosition.sqrMagnitude > 0.0001f)
-                {
-                    __result = _currentPosition + __instance.Current;
-                }
-                // else: leave __result unchanged - spring returns its natural value
+                __result = _currentPosition + __instance.Current;
             }
         }
     }

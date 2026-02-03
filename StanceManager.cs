@@ -179,7 +179,6 @@ namespace CameraRotationMod
         
         /// <summary>
         /// Check if player is holding a firearm (not melee, empty hands, or using items)
-        /// Uses the same approach as Realism mod: cast HandsController to FirearmController
         /// </summary>
         public static bool IsHoldingFirearm()
         {
@@ -189,7 +188,6 @@ namespace CameraRotationMod
             
             // HandsController will be FirearmController when holding a gun
             // It will be different controller types for melee, meds, food, grenades, empty hands
-            // This is the same approach used by Realism mod
             return gameWorld.MainPlayer.HandsController is Player.FirearmController;
         }
 
@@ -208,8 +206,8 @@ namespace CameraRotationMod
                 );
             }
 
-            // If in Stance1 mode and enabled, return stance1 rotation
-            if (CurrentStance == Stance.Stance1 && Plugin._Stance1HandsRotationEnabled.Value)
+            // If in Stance1 mode, return stance1 rotation
+            if (CurrentStance == Stance.Stance1)
             {
                 return new Vector3(
                     Plugin._Stance1HandsPitchRotation.Value,
@@ -218,8 +216,8 @@ namespace CameraRotationMod
                 );
             }
 
-            // If in Stance2 mode and enabled, return stance2 rotation
-            if (CurrentStance == Stance.Stance2 && Plugin._Stance2HandsRotationEnabled.Value)
+            // If in Stance2 mode, return stance2 rotation
+            if (CurrentStance == Stance.Stance2)
             {
                 return new Vector3(
                     Plugin._Stance2HandsPitchRotation.Value,
@@ -228,8 +226,8 @@ namespace CameraRotationMod
                 );
             }
 
-            // If in Stance3 mode and enabled, return stance3 rotation
-            if (CurrentStance == Stance.Stance3 && Plugin._Stance3HandsRotationEnabled.Value)
+            // If in Stance3 mode, return stance3 rotation
+            if (CurrentStance == Stance.Stance3)
             {
                 return new Vector3(
                     Plugin._Stance3HandsPitchRotation.Value,
@@ -257,8 +255,8 @@ namespace CameraRotationMod
                 );
             }
 
-            // If in Stance1 mode and enabled, return stance1 position
-            if (CurrentStance == Stance.Stance1 && Plugin._Stance1HandsPositionEnabled.Value)
+            // If in Stance1 mode, return stance1 position
+            if (CurrentStance == Stance.Stance1)
             {
                 return new Vector3(
                     Plugin._Stance1HandsSidewaysOffset.Value,
@@ -267,8 +265,8 @@ namespace CameraRotationMod
                 );
             }
 
-            // If in Stance2 mode and enabled, return stance2 position
-            if (CurrentStance == Stance.Stance2 && Plugin._Stance2HandsPositionEnabled.Value)
+            // If in Stance2 mode, return stance2 position
+            if (CurrentStance == Stance.Stance2)
             {
                 return new Vector3(
                     Plugin._Stance2HandsSidewaysOffset.Value,
@@ -277,8 +275,8 @@ namespace CameraRotationMod
                 );
             }
 
-            // If in Stance3 mode and enabled, return stance3 position
-            if (CurrentStance == Stance.Stance3 && Plugin._Stance3HandsPositionEnabled.Value)
+            // If in Stance3 mode, return stance3 position
+            if (CurrentStance == Stance.Stance3)
             {
                 return new Vector3(
                     Plugin._Stance3HandsSidewaysOffset.Value,
