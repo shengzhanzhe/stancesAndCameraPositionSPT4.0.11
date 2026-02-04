@@ -3,30 +3,31 @@
 ## v1.1.0 (February 2026)
 
 ### Bug Fixes
-- Fixed the annoying flicker/snap at the end of ADS transitions, especially noticeable with large stance rotations like -30°
-- Removed some conflicting code that was fighting with the smooth transitions
+- Fixed visual flicker at the end of ADS transitions, particularly noticeable with large stance rotations (e.g., -30°)
+- Resolved conflicting code that interfered with smooth transitions
 
-### Safety Stuff
-- Added bounds checking so arms won't stretch to infinity
-- Clamped physics timestep to handle frame drops without exploding
-- NaN detection - if values go invalid it auto-resets instead of breaking
+### Stability Improvements
+- Added bounds checking to prevent extreme visual glitches
+- Clamped physics timestep to maintain stability during frame drops
+- Implemented NaN detection with automatic state reset
 
-### Performance
-- Cached config values so we're not reading them every single frame
-- Cached GameWorld reference (was looking it up 3+ times per frame lol)
-- Camera offset only updates when it actually changes now
+### Performance Optimizations
+- Cached configuration values to reduce per-frame overhead
+- Cached GameWorld reference to eliminate redundant lookups
+- Camera offset now updates only when values change
 
-### Config Cleanup
-- Moved some toggles to Advanced tab (F1 → Advanced) to reduce clutter:
-  - Reset on ADS, ADS Transition Speed
+### Configuration Changes
+- Relocated advanced settings to the Advanced tab (F1 → Advanced):
+  - Reset on ADS
+  - ADS Transition Speed
   - Per-stance rotation/position enable toggles
 
 ### Code Cleanup
-- Deleted 6 unused patch files that were just sitting there doing nothing
-- Removed dead code and old comments
-- 0 compiler warnings now
+- Removed 6 unused patch files
+- Eliminated deprecated code and comments
+- Resolved all compiler warnings
 
-Final structure is just 4 files:
+### File Structure
 ```
 Plugin.cs, StanceManager.cs, PlayerSpringPatch.cs, SpringGetPatch.cs
 ```
