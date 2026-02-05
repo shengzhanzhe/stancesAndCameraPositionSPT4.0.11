@@ -198,7 +198,7 @@ public class Plugin : BaseUnityPlugin
         _StanceTransitionSpeed = Config.Bind(
             Settings,
             "Stance Transition Speed",
-            1f,
+            2f,
             new ConfigDescription("How quickly hands transition between Default and Stance. Higher = faster/snappier, Lower = slower/smoother. Recommended: 3-10",
             new AcceptableValueRange<float>(0.5f, 20f)));
 
@@ -288,7 +288,7 @@ public class Plugin : BaseUnityPlugin
         _Stance1HandsPitchRotation = Config.Bind(
             Stance1HandsRotations,
             "Stance 1 Hands Pitch (X-Axis)",
-            -30f,
+            -15f,
             new ConfigDescription("Stance 1 hands/arms pitch rotation in degrees (up/down tilt)",
             new AcceptableValueRange<float>(-45f, 45f),
             new ConfigurationManagerAttributes { Order = 3 }));
@@ -296,7 +296,7 @@ public class Plugin : BaseUnityPlugin
         _Stance1HandsYawRotation = Config.Bind(
             Stance1HandsRotations,
             "Stance 1 Hands Yaw (Y-Axis)",
-            -30f,
+            -15f,
             new ConfigDescription("Stance 1 hands/arms yaw rotation in degrees (left/right turn)",
             new AcceptableValueRange<float>(-45f, 45f),
             new ConfigurationManagerAttributes { Order = 2 }));
@@ -312,7 +312,7 @@ public class Plugin : BaseUnityPlugin
         _Stance1HandsForwardBackwardOffset = Config.Bind(
             Stance1HandsPositions,
             "Stance 1 Hands Forward/Backward Offset",
-            -0.3f,
+            -0.15f,
             new ConfigDescription("Stance 1 hands/weapon position forward/backward (positive = forward)",
             new AcceptableValueRange<float>(-0.5f, 0.5f),
             new ConfigurationManagerAttributes { Order = 3 }));
@@ -352,7 +352,7 @@ public class Plugin : BaseUnityPlugin
         _Stance2HandsYawRotation = Config.Bind(
             Stance2HandsRotations,
             "Stance 2 Hands Yaw (Y-Axis)",
-            -45f,
+            -30f,
             new ConfigDescription("Stance 2 hands/arms yaw rotation in degrees (left/right turn)",
             new AcceptableValueRange<float>(-45f, 45f),
             new ConfigurationManagerAttributes { Order = 2 }));
@@ -400,7 +400,7 @@ public class Plugin : BaseUnityPlugin
         _Stance3HandsPitchRotation = Config.Bind(
             Stance3HandsRotations,
             "Stance 3 Hands Pitch (X-Axis)",
-            0f,
+            30f,
             new ConfigDescription("Stance 3 hands/arms pitch rotation in degrees (up/down tilt)",
             new AcceptableValueRange<float>(-45f, 45f),
             new ConfigurationManagerAttributes { Order = 3 }));
@@ -424,7 +424,7 @@ public class Plugin : BaseUnityPlugin
         _Stance3HandsForwardBackwardOffset = Config.Bind(
             Stance3HandsPositions,
             "Stance 3 Hands Forward/Backward Offset",
-            0.06f,
+            0.03f,
             new ConfigDescription("Stance 3 hands/weapon position forward/backward (positive = forward)",
             new AcceptableValueRange<float>(-0.5f, 0.5f),
             new ConfigurationManagerAttributes { Order = 3 }));
