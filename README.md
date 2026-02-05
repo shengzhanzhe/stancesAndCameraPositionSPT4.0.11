@@ -81,6 +81,12 @@ Each stance (1, 2, 3) has:
 3. Run `dotnet build -c Release`
 4. Output: `bin/Release/net472/CameraRotationMod.dll`
 
+## Known Issues
+
+- Stance transition speed modifier affects ADS → stance transition too
+- Ending tactical sprint causes weapon to warp towards low sprint position
+- It's possible to switch stances while running - because of that, if a stance has tactical sprint enabled, the weapon instantly switches to tactical sprint mode
+
 ## Compatibility
 
 - **SPT Version**: 4.0.11+
