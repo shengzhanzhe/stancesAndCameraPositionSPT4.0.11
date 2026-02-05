@@ -110,9 +110,12 @@ namespace CameraRotationMod.Patches
             // Detect state changes (ADS or Stance toggle) to reinitialize spring
             bool stateChanged = (isAiming != _wasAiming) || (isInStance != _wasInStance);
             
-            // Calculate spring physics from ADS transition speed
+            // Calculate spring physics with appropriate transition speed
+            // ADS transitions use ADS speed, stance transitions use stance speed
             // Speed 1 = stiffness 75, Speed 2 = stiffness 150, Speed 3 = stiffness 300
-            float transitionSpeed = Plugin._ADSTransitionSpeed?.Value ?? 2f;
+            float transitionSpeed = isAiming ? 
+                (Plugin._ADSTransitionSpeed?.Value ?? 2f) : 
+                (Plugin._StanceTransitionSpeed?.Value ?? 1f);
             float stiffness = transitionSpeed * 75f;
             float damping = 50f; // Fixed damping for smooth stop without overshoot
             
