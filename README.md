@@ -1,4 +1,4 @@
-# Camera Rotation & Position Mod for SPT
+# FpsCameraStances for SPT
 
 Take full control of your first-person view and weapon handling with this highly customizable mod.
 
@@ -44,7 +44,7 @@ Create up to **3 unique weapon ready positions**, each with:
 ## Installation
 
 1. Download the release or build from source
-2. Copy `CameraRotationMod.dll` to `BepInEx/plugins/`
+2. Copy `shwngFpsCameraStances4.dll` to `BepInEx/plugins/`
 3. Launch the game
 4. Press F1 to open Configuration Manager and customize settings
 
@@ -79,7 +79,7 @@ Each stance (1, 2, 3) has:
 1. Clone the repository
 2. Ensure reference DLLs are in the `References/` folder
 3. Run `dotnet build -c Release`
-4. Output: `bin/Release/net472/CameraRotationMod.dll`
+4. Output: `bin/Release/net472/shwngFpsCameraStances4.dll`
 
 ## Known Issues
 

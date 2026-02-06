@@ -4,6 +4,7 @@
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>shwngFpsCameraStances4</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
