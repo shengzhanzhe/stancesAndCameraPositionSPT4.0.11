@@ -86,6 +86,8 @@ Each stance (1, 2, 3) has:
 - Stance transition speed modifier affects ADS → stance transition too
 - Ending tactical sprint causes weapon to warp towards low sprint position
 - It's possible to switch stances while running - because of that, if a stance has tactical sprint enabled, the weapon instantly switches to tactical sprint mode
+- Rarely, using very high position/rotation offsets while ADS can cause full stamina depletion
+- Rarely, extreme position/rotation offsets may cause the weapon to briefly fly out of hand (2-3 frames) before safeguard logic corrects it
 
 ## Compatibility
 
