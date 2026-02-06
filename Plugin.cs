@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace CameraRotationMod;
 
-[BepInPlugin("shwng.camerarotation", "Camera Rotation & Position Mod", "1.0.0")]
+[BepInPlugin("shwng.camerarotation", "shwng.FpsCameraStances", "0.9.9")]
 public class Plugin : BaseUnityPlugin
 {
     public static new ManualLogSource Logger;
@@ -416,7 +416,7 @@ public class Plugin : BaseUnityPlugin
         _Stance3HandsRollRotation = Config.Bind(
             Stance3HandsRotations,
             "Stance 3 Hands Roll (Z-Axis)",
-            15f,
+            0f,
             new ConfigDescription("Stance 3 hands/arms roll rotation in degrees (weapon cant)",
             new AcceptableValueRange<float>(-45f, 45f),
             new ConfigurationManagerAttributes { Order = 1 }));
@@ -440,7 +440,7 @@ public class Plugin : BaseUnityPlugin
         _Stance3HandsSidewaysOffset = Config.Bind(
             Stance3HandsPositions,
             "Stance 3 Hands Sideways Offset",
-            0.04f,
+            0f,
             new ConfigDescription("Stance 3 hands/weapon position left/right (positive = right)",
             new AcceptableValueRange<float>(-0.5f, 0.5f),
             new ConfigurationManagerAttributes { Order = 1 }));
