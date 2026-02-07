@@ -31,6 +31,9 @@ namespace CameraRotationMod
         // Tac Sprint variables - track state to avoid setting animator every frame
         private static bool _isTacSprintActive = false;
         private static bool _wasAiming = false;
+        
+        // Track GameWorld to detect raid changes and reset state
+        private static GameWorld _lastGameWorld = null;
 
         public static void Initialize(ConfigEntry<KeyCode> stanceToggleKeyConfig)
         {
@@ -300,6 +303,19 @@ namespace CameraRotationMod
         }
 
         /// <summary>
+        /// Resets all stance state - called when entering new raid or GameWorld changes
+        /// </summary>
+        public static void ResetState()
+        {
+            CurrentStance = Stance.Default;
+            _isTacSprintActive = false;
+            _wasAiming = false;
+            _lastGameWorld = null;
+            _wasKeyPressed = false;
+            _lastScrollTime = 0f;
+        }
+        
+        /// <summary>
         /// Updates the tac sprint animation state based on stance and sprint status
         /// Uses state tracking to avoid setting animator parameters every frame
         /// </summary>
@@ -309,14 +325,28 @@ namespace CameraRotationMod
             if (gameWorld?.MainPlayer == null)
             {
                 // Reset state when no player
-                if (_isTacSprintActive)
-                {
-                    _isTacSprintActive = false;
-                }
+                ResetState();
                 return;
+            }
+            
+            // Detect GameWorld change (new raid) and reset state
+            if (_lastGameWorld != gameWorld)
+            {
+                // Reset but don't change stance preference - user may want to keep their stance
+                _isTacSprintActive = false;
+                _wasAiming = false;
+                _lastGameWorld = gameWorld;
             }
 
             var player = gameWorld.MainPlayer;
+            
+            // CRITICAL: If player switched away from firearm (e.g., consumables, melee), 
+            // immediately disable tac sprint to prevent stuck animation glitch
+            if (_isTacSprintActive && !IsHoldingFirearm())
+            {
+                DisableTacSprint(player);
+                return;
+            }
             
             // Check if player is aiming - CRITICAL for preventing stuck sprint
             bool isAiming = player.ProceduralWeaponAnimation?.IsAiming ?? false;
@@ -389,15 +419,25 @@ namespace CameraRotationMod
 
         /// <summary>
         /// Disable tac sprint animation - reset to actual weapon size
+        /// Handles both firearm and non-firearm states (consumables, empty hands, etc.)
         /// </summary>
         private static void DisableTacSprint(Player player)
         {
+            // Always mark as inactive first
+            _isTacSprintActive = false;
+            
+            // If holding a firearm, reset to actual weapon size
             if (player.HandsController is Player.FirearmController fc)
             {
                 // Get the actual weapon width from its item dimensions
                 float actualWeaponSize = (float)fc.Item.CalculateCellSize().X;
                 player.BodyAnimatorCommon.SetFloat(PlayerAnimator.WEAPON_SIZE_MODIFIER_PARAM_HASH, actualWeaponSize);
-                _isTacSprintActive = false;
+            }
+            else
+            {
+                // Not holding a firearm - reset to neutral (1 = default for non-weapons)
+                // This prevents the stuck animation glitch when switching to consumables
+                player.BodyAnimatorCommon.SetFloat(PlayerAnimator.WEAPON_SIZE_MODIFIER_PARAM_HASH, 1f);
             }
         }
 

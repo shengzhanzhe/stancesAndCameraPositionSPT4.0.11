@@ -20,6 +20,9 @@ namespace CameraRotationMod.Patches
         private static bool _wasInStance = false;
         private static bool _isInitialized = false;
         
+        // Track GameWorld to detect raid changes and reset state
+        private static GameWorld _lastGameWorld = null;
+        
         // Spring simulation for smooth transitions
         private static Vector3 _currentRotation = Vector3.zero;
         private static Vector3 _targetRotation = Vector3.zero;
@@ -28,6 +31,23 @@ namespace CameraRotationMod.Patches
         private static Vector3 _currentPosition = Vector3.zero;
         private static Vector3 _targetPosition = Vector3.zero;
         private static Vector3 _positionVelocity = Vector3.zero;
+        
+        /// <summary>
+        /// Reset all spring state - called when entering new raid or GameWorld changes
+        /// </summary>
+        public static void ResetState()
+        {
+            _wasAiming = false;
+            _wasInStance = false;
+            _isInitialized = false;
+            _lastGameWorld = null;
+            _currentRotation = Vector3.zero;
+            _targetRotation = Vector3.zero;
+            _rotationVelocity = Vector3.zero;
+            _currentPosition = Vector3.zero;
+            _targetPosition = Vector3.zero;
+            _positionVelocity = Vector3.zero;
+        }
         
         protected override MethodBase GetTargetMethod()
         {
@@ -67,6 +87,13 @@ namespace CameraRotationMod.Patches
             var gameWorld = Singleton<GameWorld>.Instance;
             if (gameWorld?.MainPlayer?.ProceduralWeaponAnimation?.HandsContainer == null)
                 return;
+            
+            // Detect GameWorld change (new raid) and reset spring state
+            if (_lastGameWorld != gameWorld)
+            {
+                ResetState();
+                _lastGameWorld = gameWorld;
+            }
 
             var pwa = gameWorld.MainPlayer.ProceduralWeaponAnimation;
             var handsRotation = pwa.HandsContainer.HandsRotation;
@@ -150,6 +177,26 @@ namespace CameraRotationMod.Patches
             // Use custom spring physics with configurable damping
             _currentRotation = SpringDamp(_currentRotation, _targetRotation, ref _rotationVelocity, stiffness, damping, deltaTime);
             _currentPosition = SpringDamp(_currentPosition, _targetPosition, ref _positionVelocity, stiffness, damping, deltaTime);
+            
+            // When very close to target with low velocity, snap to target to prevent micro-jitter
+            // This eliminates the "shaky/jittery" aiming issue caused by tiny spring oscillations
+            const float positionSnapThreshold = 0.0001f;  // 0.1mm
+            const float rotationSnapThreshold = 0.01f;    // 0.01 degrees
+            const float velocitySnapThreshold = 0.01f;
+            
+            if (Vector3.SqrMagnitude(_currentRotation - _targetRotation) < rotationSnapThreshold * rotationSnapThreshold &&
+                Vector3.SqrMagnitude(_rotationVelocity) < velocitySnapThreshold * velocitySnapThreshold)
+            {
+                _currentRotation = _targetRotation;
+                _rotationVelocity = Vector3.zero;
+            }
+            
+            if (Vector3.SqrMagnitude(_currentPosition - _targetPosition) < positionSnapThreshold * positionSnapThreshold &&
+                Vector3.SqrMagnitude(_positionVelocity) < velocitySnapThreshold * velocitySnapThreshold)
+            {
+                _currentPosition = _targetPosition;
+                _positionVelocity = Vector3.zero;
+            }
 
             // Apply the spring-simulated values based on which spring this is
             // Always apply offset - removed threshold check to prevent snap/flicker at end of transition
