@@ -199,7 +199,7 @@ namespace CameraRotationMod
         /// </summary>
         public static Vector3 GetTargetRotation(bool isAiming)
         {
-            // If ADS and reset is enabled, return ADS rotation
+            // If ADS and reset rotation is enabled, return ADS rotation
             if (isAiming && (Plugin._ResetOnADS?.Value ?? false))
             {
                 return new Vector3(
