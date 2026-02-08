@@ -105,6 +105,8 @@ public class Plugin : BaseUnityPlugin
     // Advanced ADS Transition (Shouldering Effect)
     private const string AdvancedADSSettings = "Advanced ADS Transitions";
     public static ConfigEntry<bool> _EnableAdvancedADSTransitions;
+    public static ConfigEntry<bool> _ScaleByWeaponStats;
+    public static ConfigEntry<float> _WeaponStatsScaleIntensity;
     public static ConfigEntry<float> _ADSShoulderThrowForward;
     public static ConfigEntry<float> _ADSShoulderThrowUp;
     public static ConfigEntry<float> _ADSShoulderThrowDuration;
@@ -142,51 +144,63 @@ public class Plugin : BaseUnityPlugin
             false,
             new ConfigDescription("When enabled, weapon is thrown forward then pushed back when aiming to simulate shouldering",
             null,
-            new ConfigurationManagerAttributes { Order = 6 }));
+            new ConfigurationManagerAttributes { Order = 7 }));
+
+        _ScaleByWeaponStats = Config.Bind(
+            AdvancedADSSettings,
+            "Scale by Weapon Stats",
+            true,
+            new ConfigDescription("When enabled, shouldering speed/duration/amount scales with weapon weight and ergonomics (uses EFT's AimingSpeed calculation). Heavy/low-ergo = slower, dramatic. Light/high-ergo = fast, subtle. Needs Enable Advanced ADS Transitions enabled to have an effect.",
+            null,
+            new ConfigurationManagerAttributes { Order = 7 }));
+
+        _WeaponStatsScaleIntensity = Config.Bind(
+            AdvancedADSSettings,
+            "Weapon Stats Scale Intensity",
+            1f,
+            new ConfigDescription("How strongly weapon stats affect shouldering. 0 = no scaling (all weapons same), 1 = normal, 2 = exaggerated difference between light/heavy weapons.",
+            new AcceptableValueRange<float>(0f, 2f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 6 }));
 
         _ADSShoulderThrowForward = Config.Bind(
             AdvancedADSSettings,
             "Shoulder Throw Forward Amount",
             0.02f,
-            new ConfigDescription("How far forward the weapon is thrown before settling (higher = more dramatic effect)",
+            new ConfigDescription("Base forward throw distance. With 'Scale by Weapon Stats' enabled, this is multiplied by inverse AimingSpeed (heavy weapons throw more).",
             new AcceptableValueRange<float>(0f, 0.3f),
-            new ConfigurationManagerAttributes { Order = 5 },
-            new ConfigurationManagerAttributes { IsAdvanced = true }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 5 }));
 
         _ADSShoulderThrowUp = Config.Bind(
             AdvancedADSSettings,
             "Shoulder Throw Up Amount",
             -0.015f,
-            new ConfigDescription("How far up the weapon rises during the throw phase",
+            new ConfigDescription("Base vertical offset during throw. Negative = down. With 'Scale by Weapon Stats', scales with inverse AimingSpeed.",
             new AcceptableValueRange<float>(-0.15f, 0.15f),
-            new ConfigurationManagerAttributes { Order = 4 },
-            new ConfigurationManagerAttributes { IsAdvanced = true }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 4 }));
 
         _ADSShoulderThrowDuration = Config.Bind(
             AdvancedADSSettings,
             "Shoulder Throw Duration",
-            0.2f,
-            new ConfigDescription("How long (seconds) the forward throw phase lasts before settling back",
+            0.15f,
+            new ConfigDescription("Base throw phase duration (seconds). With 'Scale by Weapon Stats', heavy weapons have longer duration.",
             new AcceptableValueRange<float>(0.01f, 0.5f),
-            new ConfigurationManagerAttributes { Order = 3 }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 3 }));
 
         _ADSShoulderThrowSpeed = Config.Bind(
             AdvancedADSSettings,
             "Shoulder Throw Speed",
-            3f,
-            new ConfigDescription("Speed of the forward throw motion (higher = snappier)",
-            new AcceptableValueRange<float>(0.05f, 3f),
-            new ConfigurationManagerAttributes { Order = 2 },
-            new ConfigurationManagerAttributes { IsAdvanced = true }));
+            2f,
+            new ConfigDescription("Base speed of throw motion. With 'Scale by Weapon Stats', multiplied by AimingSpeed (light weapons = faster).",
+            new AcceptableValueRange<float>(0.5f, 5f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 2 }));
 
         _ADSShoulderSettleSpeed = Config.Bind(
             AdvancedADSSettings,
             "Shoulder Settle Speed",
-            2f,
-            new ConfigDescription("Speed of settling back to ADS position after throw (higher = snappier)",
-            new AcceptableValueRange<float>(0.05f, 2f),
-            new ConfigurationManagerAttributes { Order = 1 },
-            new ConfigurationManagerAttributes { IsAdvanced = true }));
+            1.5f,
+            new ConfigDescription("Base speed of settling to ADS. With 'Scale by Weapon Stats', multiplied by AimingSpeed.",
+            new AcceptableValueRange<float>(0.5f, 5f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 1 }));
 
         _ADSTransitionSpeed = Config.Bind(
             Settings,

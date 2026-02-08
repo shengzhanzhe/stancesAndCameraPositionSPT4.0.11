@@ -132,6 +132,38 @@ namespace CameraRotationMod.Patches
             
             // Advanced ADS Transition (Shouldering Effect)
             bool advancedADSEnabled = Plugin._EnableAdvancedADSTransitions?.Value ?? false;
+            bool scaleByWeaponStats = Plugin._ScaleByWeaponStats?.Value ?? true;
+            
+            // Get EFT's calculated AimingSpeed (based on weapon weight + ergonomics)
+            // Typically ranges from ~0.4 (heavy/low ergo) to ~2.5+ (light/high ergo)
+            float eftAimingSpeed = pwa.AimingSpeed;
+            float scaleIntensity = Plugin._WeaponStatsScaleIntensity?.Value ?? 1f;
+            
+            // Calculate raw multipliers
+            float rawAimingSpeedMultiplier = eftAimingSpeed;
+            float rawInverseAimingSpeed = 1f / Mathf.Max(eftAimingSpeed, 0.5f);
+            
+            // Lerp between 1 (no effect) and full effect based on intensity
+            // 0 = no scaling, 1 = normal, 2 = exaggerated
+            float aimingSpeedMultiplier = scaleByWeaponStats ? Mathf.LerpUnclamped(1f, rawAimingSpeedMultiplier, scaleIntensity) : 1f;
+            float inverseAimingSpeed = scaleByWeaponStats ? Mathf.LerpUnclamped(1f, rawInverseAimingSpeed, scaleIntensity) : 1f;
+            
+            // Get base config values
+            float baseThrowDuration = Plugin._ADSShoulderThrowDuration?.Value ?? 0.15f;
+            float baseThrowSpeed = Plugin._ADSShoulderThrowSpeed?.Value ?? 2f;
+            float baseSettleSpeed = Plugin._ADSShoulderSettleSpeed?.Value ?? 1.5f;
+            float baseThrowForward = Plugin._ADSShoulderThrowForward?.Value ?? 0.02f;
+            float baseThrowUp = Plugin._ADSShoulderThrowUp?.Value ?? -0.015f;
+            
+            // Apply weapon stat scaling
+            // Duration: heavy weapons = longer duration (inverse of aiming speed)
+            float throwDuration = baseThrowDuration * inverseAimingSpeed;
+            // Speeds: light/high-ergo = faster (multiply by aiming speed)
+            float throwSpeed = baseThrowSpeed * aimingSpeedMultiplier;
+            float settleSpeed = baseSettleSpeed * aimingSpeedMultiplier;
+            // Throw amounts: heavy = more dramatic throw (inverse of aiming speed)
+            float throwForward = baseThrowForward * inverseAimingSpeed;
+            float throwUp = baseThrowUp * inverseAimingSpeed;
             
             // Start shouldering phase when entering ADS with advanced transitions enabled
             if (justStartedAiming && advancedADSEnabled && isHoldingFirearm)
@@ -147,30 +179,27 @@ namespace CameraRotationMod.Patches
             }
             else if (_isInShoulderingPhase)
             {
-                float throwDuration = Plugin._ADSShoulderThrowDuration?.Value ?? 0.12f;
                 if (Time.time - _shoulderingStartTime >= throwDuration)
                 {
                     _isInShoulderingPhase = false;
                 }
             }
             
-            // Calculate spring physics with appropriate transition speed
-            // ADS transitions use ADS speed, stance transitions use stance speed
-            // Speed 1 = stiffness 75, Speed 2 = stiffness 150, Speed 3 = stiffness 300
+            // Calculate transition speed for SmoothDamp
             float transitionSpeed;
             if (_isInShoulderingPhase)
             {
-                // Throw phase uses faster speed
-                transitionSpeed = Plugin._ADSShoulderThrowSpeed?.Value ?? 12f;
+                transitionSpeed = throwSpeed;
             }
             else if (isAiming && advancedADSEnabled)
             {
-                // Settle phase after throw
-                transitionSpeed = Plugin._ADSShoulderSettleSpeed?.Value ?? 6f;
+                transitionSpeed = settleSpeed;
             }
             else if (isAiming)
             {
-                transitionSpeed = Plugin._ADSTransitionSpeed?.Value ?? 2f;
+                // Non-advanced ADS transition also benefits from weapon scaling if enabled
+                float baseADSSpeed = Plugin._ADSTransitionSpeed?.Value ?? 2f;
+                transitionSpeed = scaleByWeaponStats ? (baseADSSpeed * aimingSpeedMultiplier) : baseADSSpeed;
             }
             else
             {
@@ -184,8 +213,6 @@ namespace CameraRotationMod.Patches
             Vector3 shoulderingOffset = Vector3.zero;
             if (_isInShoulderingPhase)
             {
-                float throwForward = Plugin._ADSShoulderThrowForward?.Value ?? 0.08f;
-                float throwUp = Plugin._ADSShoulderThrowUp?.Value ?? 0.02f;
                 shoulderingOffset = new Vector3(0f, throwUp, throwForward);
             }
             
