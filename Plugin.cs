@@ -102,6 +102,15 @@ public class Plugin : BaseUnityPlugin
     public static ConfigEntry<float> _ADSHandsUpDownOffset;
     public static ConfigEntry<float> _ADSHandsSidewaysOffset;
 
+    // Advanced ADS Transition (Shouldering Effect)
+    private const string AdvancedADSSettings = "Advanced ADS Transitions";
+    public static ConfigEntry<bool> _EnableAdvancedADSTransitions;
+    public static ConfigEntry<float> _ADSShoulderThrowForward;
+    public static ConfigEntry<float> _ADSShoulderThrowUp;
+    public static ConfigEntry<float> _ADSShoulderThrowDuration;
+    public static ConfigEntry<float> _ADSShoulderThrowSpeed;
+    public static ConfigEntry<float> _ADSShoulderSettleSpeed;
+
     public void Awake()
     {
         Logger = base.Logger;
@@ -124,8 +133,59 @@ public class Plugin : BaseUnityPlugin
             Settings,
             "Reset Positions When Aiming",
             true,
-            new ConfigDescription("When enabled, smoothly transitions all positions to defaults when ADS",
+            new ConfigDescription("When enabled, smoothly transitions all positions to defaults when ADS"));
+
+        // Advanced ADS Transitions (Shouldering Effect)
+        _EnableAdvancedADSTransitions = Config.Bind(
+            AdvancedADSSettings,
+            "Enable Advanced ADS Transitions",
+            false,
+            new ConfigDescription("When enabled, weapon is thrown forward then pushed back when aiming to simulate shouldering",
             null,
+            new ConfigurationManagerAttributes { Order = 6 }));
+
+        _ADSShoulderThrowForward = Config.Bind(
+            AdvancedADSSettings,
+            "Shoulder Throw Forward Amount",
+            0.02f,
+            new ConfigDescription("How far forward the weapon is thrown before settling (higher = more dramatic effect)",
+            new AcceptableValueRange<float>(0f, 0.3f),
+            new ConfigurationManagerAttributes { Order = 5 },
+            new ConfigurationManagerAttributes { IsAdvanced = true }));
+
+        _ADSShoulderThrowUp = Config.Bind(
+            AdvancedADSSettings,
+            "Shoulder Throw Up Amount",
+            -0.015f,
+            new ConfigDescription("How far up the weapon rises during the throw phase",
+            new AcceptableValueRange<float>(-0.15f, 0.15f),
+            new ConfigurationManagerAttributes { Order = 4 },
+            new ConfigurationManagerAttributes { IsAdvanced = true }));
+
+        _ADSShoulderThrowDuration = Config.Bind(
+            AdvancedADSSettings,
+            "Shoulder Throw Duration",
+            0.2f,
+            new ConfigDescription("How long (seconds) the forward throw phase lasts before settling back",
+            new AcceptableValueRange<float>(0.01f, 0.5f),
+            new ConfigurationManagerAttributes { Order = 3 }));
+
+        _ADSShoulderThrowSpeed = Config.Bind(
+            AdvancedADSSettings,
+            "Shoulder Throw Speed",
+            3f,
+            new ConfigDescription("Speed of the forward throw motion (higher = snappier)",
+            new AcceptableValueRange<float>(0.05f, 3f),
+            new ConfigurationManagerAttributes { Order = 2 },
+            new ConfigurationManagerAttributes { IsAdvanced = true }));
+
+        _ADSShoulderSettleSpeed = Config.Bind(
+            AdvancedADSSettings,
+            "Shoulder Settle Speed",
+            2f,
+            new ConfigDescription("Speed of settling back to ADS position after throw (higher = snappier)",
+            new AcceptableValueRange<float>(0.05f, 2f),
+            new ConfigurationManagerAttributes { Order = 1 },
             new ConfigurationManagerAttributes { IsAdvanced = true }));
 
         _ADSTransitionSpeed = Config.Bind(
@@ -206,7 +266,7 @@ public class Plugin : BaseUnityPlugin
         _StanceTransitionSpeed = Config.Bind(
             Settings,
             "Stance Transition Speed",
-            2f,
+            1f,
             new ConfigDescription("How quickly hands transition between Default and Stance. Higher = faster/snappier, Lower = slower/smoother. Recommended: 3-10",
             new AcceptableValueRange<float>(0.5f, 20f)));
 

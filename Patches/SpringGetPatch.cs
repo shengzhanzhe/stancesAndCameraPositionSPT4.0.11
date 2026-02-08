@@ -9,9 +9,9 @@ using EFT;
 namespace CameraRotationMod.Patches
 {
     /// <summary>
-    /// Patch Spring.Get() to add our custom offset to the return value with smooth spring-based transitions
-    /// Handles both ADS transitions and Stance toggling with independent spring physics
-    /// Uses true spring physics with configurable damping for overshoot control
+    /// Patch Spring.Get() to add our custom offset to the return value with smooth transitions
+    /// Handles both ADS transitions and Stance toggling with framerate-independent interpolation
+    /// Uses Unity's SmoothDamp for guaranteed stability at any frame rate
     /// </summary>
     public class SpringGetPatch : ModulePatch
     {
@@ -23,7 +23,11 @@ namespace CameraRotationMod.Patches
         // Track GameWorld to detect raid changes and reset state
         private static GameWorld _lastGameWorld = null;
         
-        // Spring simulation for smooth transitions
+        // Advanced ADS Transition (Shouldering) state
+        private static bool _isInShoulderingPhase = false;
+        private static float _shoulderingStartTime = 0f;
+        
+        // Smooth interpolation for transitions using SmoothDamp
         private static Vector3 _currentRotation = Vector3.zero;
         private static Vector3 _targetRotation = Vector3.zero;
         private static Vector3 _rotationVelocity = Vector3.zero;
@@ -33,7 +37,7 @@ namespace CameraRotationMod.Patches
         private static Vector3 _positionVelocity = Vector3.zero;
         
         /// <summary>
-        /// Reset all spring state - called when entering new raid or GameWorld changes
+        /// Reset all state - called when entering new raid or GameWorld changes
         /// </summary>
         public static void ResetState()
         {
@@ -41,6 +45,8 @@ namespace CameraRotationMod.Patches
             _wasInStance = false;
             _isInitialized = false;
             _lastGameWorld = null;
+            _isInShoulderingPhase = false;
+            _shoulderingStartTime = 0f;
             _currentRotation = Vector3.zero;
             _targetRotation = Vector3.zero;
             _rotationVelocity = Vector3.zero;
@@ -55,29 +61,15 @@ namespace CameraRotationMod.Patches
         }
         
         /// <summary>
-        /// Custom spring physics with configurable stiffness and damping
-        /// Lower damping = more overshoot/oscillation
-        /// Higher damping = less overshoot, slower settling
-        /// Critical damping = sqrt(4 * stiffness) for no overshoot
+        /// Convert transition speed (user-facing) to SmoothDamp smoothTime (seconds)
+        /// Higher speed = faster = lower smoothTime
         /// </summary>
-        private static Vector3 SpringDamp(Vector3 current, Vector3 target, ref Vector3 velocity, 
-            float stiffness, float damping, float deltaTime)
+        private static float SpeedToSmoothTime(float speed)
         {
-            // Spring force: F = -k * (current - target)
-            Vector3 displacement = current - target;
-            Vector3 springForce = -stiffness * displacement;
-            
-            // Damping force: F = -c * velocity
-            Vector3 dampingForce = -damping * velocity;
-            
-            // Total acceleration (assuming mass = 1)
-            Vector3 acceleration = springForce + dampingForce;
-            
-            // Semi-implicit Euler integration (more stable than explicit Euler)
-            velocity += acceleration * deltaTime;
-            current += velocity * deltaTime;
-            
-            return current;
+            // Clamp speed to avoid division by zero and extreme values
+            speed = Mathf.Clamp(speed, 0.5f, 20f);
+            // Convert: speed 1 → 0.25s, speed 4 → 0.0625s, speed 12 → 0.02s
+            return 0.25f / speed;
         }
         
         [PatchPostfix]
@@ -136,34 +128,84 @@ namespace CameraRotationMod.Patches
 
             // Detect state changes (ADS or Stance toggle) to reinitialize spring
             bool stateChanged = (isAiming != _wasAiming) || (isInStance != _wasInStance);
+            bool justStartedAiming = isAiming && !_wasAiming;
+            
+            // Advanced ADS Transition (Shouldering Effect)
+            bool advancedADSEnabled = Plugin._EnableAdvancedADSTransitions?.Value ?? false;
+            
+            // Start shouldering phase when entering ADS with advanced transitions enabled
+            if (justStartedAiming && advancedADSEnabled && isHoldingFirearm)
+            {
+                _isInShoulderingPhase = true;
+                _shoulderingStartTime = Time.time;
+            }
+            
+            // End shouldering phase when no longer aiming or duration exceeded
+            if (!isAiming)
+            {
+                _isInShoulderingPhase = false;
+            }
+            else if (_isInShoulderingPhase)
+            {
+                float throwDuration = Plugin._ADSShoulderThrowDuration?.Value ?? 0.12f;
+                if (Time.time - _shoulderingStartTime >= throwDuration)
+                {
+                    _isInShoulderingPhase = false;
+                }
+            }
             
             // Calculate spring physics with appropriate transition speed
             // ADS transitions use ADS speed, stance transitions use stance speed
             // Speed 1 = stiffness 75, Speed 2 = stiffness 150, Speed 3 = stiffness 300
-            float transitionSpeed = isAiming ? 
-                (Plugin._ADSTransitionSpeed?.Value ?? 2f) : 
-                (Plugin._StanceTransitionSpeed?.Value ?? 1f);
-            float stiffness = transitionSpeed * 75f;
-            float damping = 50f; // Fixed damping for smooth stop without overshoot
+            float transitionSpeed;
+            if (_isInShoulderingPhase)
+            {
+                // Throw phase uses faster speed
+                transitionSpeed = Plugin._ADSShoulderThrowSpeed?.Value ?? 12f;
+            }
+            else if (isAiming && advancedADSEnabled)
+            {
+                // Settle phase after throw
+                transitionSpeed = Plugin._ADSShoulderSettleSpeed?.Value ?? 6f;
+            }
+            else if (isAiming)
+            {
+                transitionSpeed = Plugin._ADSTransitionSpeed?.Value ?? 2f;
+            }
+            else
+            {
+                transitionSpeed = Plugin._StanceTransitionSpeed?.Value ?? 1f;
+            }
+            // Convert transition speed to SmoothDamp smoothTime
+            // Higher transitionSpeed = faster approach = lower smoothTime
+            float smoothTime = SpeedToSmoothTime(transitionSpeed);
+            
+            // Apply shouldering offset during throw phase
+            Vector3 shoulderingOffset = Vector3.zero;
+            if (_isInShoulderingPhase)
+            {
+                float throwForward = Plugin._ADSShoulderThrowForward?.Value ?? 0.08f;
+                float throwUp = Plugin._ADSShoulderThrowUp?.Value ?? 0.02f;
+                shoulderingOffset = new Vector3(0f, throwUp, throwForward);
+            }
             
             // ALWAYS update targets to match desired state (for real-time slider adjustments)
             _targetRotation = desiredRotation;
-            _targetPosition = desiredPosition;
+            _targetPosition = desiredPosition + shoulderingOffset;
             
             if (stateChanged)
             {
-                // First time initialization - start at target with zero velocity
+                // First time initialization - start at target
                 if (!_isInitialized)
                 {
                     _currentRotation = desiredRotation;
                     _currentPosition = desiredPosition;
-                    _rotationVelocity = Vector3.zero;
-                    _positionVelocity = Vector3.zero;
                     _isInitialized = true;
                 }
                 // else: State changed but already initialized
-                // Let spring physics handle the transition naturally
-                // Existing velocity is preserved for momentum
+                // SmoothDamp will smoothly transition, reset velocities for cleaner start
+                _rotationVelocity = Vector3.zero;
+                _positionVelocity = Vector3.zero;
                 
                 _wasAiming = isAiming;
                 _wasInStance = isInStance;
@@ -171,35 +213,25 @@ namespace CameraRotationMod.Patches
             
             float deltaTime = Time.deltaTime;
             
-            // Clamp deltaTime to prevent huge jumps on lag spikes
-            deltaTime = Mathf.Min(deltaTime, 0.05f); // Max 50ms step
+            // Use Unity's SmoothDamp - mathematically stable at any frame rate
+            _currentRotation = Vector3.SmoothDamp(_currentRotation, _targetRotation, ref _rotationVelocity, smoothTime, Mathf.Infinity, deltaTime);
+            _currentPosition = Vector3.SmoothDamp(_currentPosition, _targetPosition, ref _positionVelocity, smoothTime, Mathf.Infinity, deltaTime);
             
-            // Use custom spring physics with configurable damping
-            _currentRotation = SpringDamp(_currentRotation, _targetRotation, ref _rotationVelocity, stiffness, damping, deltaTime);
-            _currentPosition = SpringDamp(_currentPosition, _targetPosition, ref _positionVelocity, stiffness, damping, deltaTime);
-            
-            // When very close to target with low velocity, snap to target to prevent micro-jitter
-            // This eliminates the "shaky/jittery" aiming issue caused by tiny spring oscillations
+            // When very close to target, snap to target to prevent micro-jitter
             const float positionSnapThreshold = 0.0001f;  // 0.1mm
             const float rotationSnapThreshold = 0.01f;    // 0.01 degrees
-            const float velocitySnapThreshold = 0.01f;
             
-            if (Vector3.SqrMagnitude(_currentRotation - _targetRotation) < rotationSnapThreshold * rotationSnapThreshold &&
-                Vector3.SqrMagnitude(_rotationVelocity) < velocitySnapThreshold * velocitySnapThreshold)
+            if (Vector3.SqrMagnitude(_currentRotation - _targetRotation) < rotationSnapThreshold * rotationSnapThreshold)
             {
                 _currentRotation = _targetRotation;
-                _rotationVelocity = Vector3.zero;
             }
             
-            if (Vector3.SqrMagnitude(_currentPosition - _targetPosition) < positionSnapThreshold * positionSnapThreshold &&
-                Vector3.SqrMagnitude(_positionVelocity) < velocitySnapThreshold * velocitySnapThreshold)
+            if (Vector3.SqrMagnitude(_currentPosition - _targetPosition) < positionSnapThreshold * positionSnapThreshold)
             {
                 _currentPosition = _targetPosition;
-                _positionVelocity = Vector3.zero;
             }
 
-            // Apply the spring-simulated values based on which spring this is
-            // Always apply offset - removed threshold check to prevent snap/flicker at end of transition
+            // Apply the interpolated values based on which spring this is
             if (isRotationSpring)
             {
                 __result = _currentRotation + __instance.Current;
