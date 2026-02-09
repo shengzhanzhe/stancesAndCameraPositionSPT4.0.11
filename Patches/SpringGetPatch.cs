@@ -27,6 +27,11 @@ namespace CameraRotationMod.Patches
         private static bool _isInShoulderingPhase = false;
         private static float _shoulderingStartTime = 0f;
         
+        // Stance transition shouldering state
+        private static bool _isInStanceShoulderingPhase = false;
+        private static float _stanceShoulderingStartTime = 0f;
+        private static Stance _previousStance = Stance.Default;
+        
         // Smooth interpolation for transitions using SmoothDamp
         private static Vector3 _currentRotation = Vector3.zero;
         private static Vector3 _targetRotation = Vector3.zero;
@@ -35,6 +40,11 @@ namespace CameraRotationMod.Patches
         private static Vector3 _currentPosition = Vector3.zero;
         private static Vector3 _targetPosition = Vector3.zero;
         private static Vector3 _positionVelocity = Vector3.zero;
+        
+        // Shouldering rotation offset (separate from the main rotation target)
+        private static Vector3 _currentShoulderingRotation = Vector3.zero;
+        private static Vector3 _targetShoulderingRotation = Vector3.zero;
+        private static Vector3 _shoulderingRotationVelocity = Vector3.zero;
         
         /// <summary>
         /// Reset all state - called when entering new raid or GameWorld changes
@@ -47,12 +57,18 @@ namespace CameraRotationMod.Patches
             _lastGameWorld = null;
             _isInShoulderingPhase = false;
             _shoulderingStartTime = 0f;
+            _isInStanceShoulderingPhase = false;
+            _stanceShoulderingStartTime = 0f;
+            _previousStance = Stance.Default;
             _currentRotation = Vector3.zero;
             _targetRotation = Vector3.zero;
             _rotationVelocity = Vector3.zero;
             _currentPosition = Vector3.zero;
             _targetPosition = Vector3.zero;
             _positionVelocity = Vector3.zero;
+            _currentShoulderingRotation = Vector3.zero;
+            _targetShoulderingRotation = Vector3.zero;
+            _shoulderingRotationVelocity = Vector3.zero;
         }
         
         protected override MethodBase GetTargetMethod()
@@ -130,6 +146,10 @@ namespace CameraRotationMod.Patches
             bool stateChanged = (isAiming != _wasAiming) || (isInStance != _wasInStance);
             bool justStartedAiming = isAiming && !_wasAiming;
             
+            // Detect stance change (different from just entering/exiting stance)
+            Stance currentStance = StanceManager.CurrentStance;
+            bool stanceChanged = currentStance != _previousStance;
+            
             // Advanced ADS Transition (Shouldering Effect)
             bool advancedADSEnabled = Plugin._EnableAdvancedADSTransitions?.Value ?? false;
             bool scaleByWeaponStats = Plugin._ScaleByWeaponStats?.Value ?? true;
@@ -185,11 +205,70 @@ namespace CameraRotationMod.Patches
                 }
             }
             
+            // Stance transition shouldering effect
+            bool affectStanceTransition = Plugin._AffectStanceTransitionToo?.Value ?? true;
+            float stanceTransitionIntensity = Plugin._AdvancedStanceTransitionIntensity?.Value ?? 1f;
+            
+            // Calculate stance-specific weapon scaling (uses its own intensity slider)
+            float stanceAimingSpeedMultiplier = affectStanceTransition ? Mathf.LerpUnclamped(1f, rawAimingSpeedMultiplier, stanceTransitionIntensity) : 1f;
+            float stanceInverseAimingSpeed = affectStanceTransition ? Mathf.LerpUnclamped(1f, rawInverseAimingSpeed, stanceTransitionIntensity) : 1f;
+            
+            // Calculate stance-specific throw values
+            float stanceThrowDuration = baseThrowDuration * stanceInverseAimingSpeed;
+            float stanceThrowSpeed = baseThrowSpeed * stanceAimingSpeedMultiplier;
+            float stanceThrowForward = baseThrowForward * stanceInverseAimingSpeed;
+            float stanceThrowUp = baseThrowUp * stanceInverseAimingSpeed;
+            
+            // Get rotation throw config values (shared between ADS and stance)
+            float baseThrowYaw = Plugin._ADSShoulderThrowYaw?.Value ?? 0f;
+            float baseThrowPitch = Plugin._ADSShoulderThrowPitch?.Value ?? 0f;
+            float baseThrowRoll = Plugin._ADSShoulderThrowRoll?.Value ?? 0f;
+            
+            // Calculate ADS rotation throw (scaled by weapon stats)
+            float throwYaw = baseThrowYaw * inverseAimingSpeed;
+            float throwPitch = baseThrowPitch * inverseAimingSpeed;
+            float throwRoll = baseThrowRoll * inverseAimingSpeed;
+            
+            // Calculate stance rotation throw (uses stance intensity slider)
+            float stanceThrowYaw = baseThrowYaw * stanceInverseAimingSpeed;
+            float stanceThrowPitch = baseThrowPitch * stanceInverseAimingSpeed;
+            float stanceThrowRoll = baseThrowRoll * stanceInverseAimingSpeed;
+            
+            // Start stance shouldering phase when changing stances (and not aiming)
+            if (stanceChanged && advancedADSEnabled && affectStanceTransition && isHoldingFirearm && !isAiming)
+            {
+                _isInStanceShoulderingPhase = true;
+                _stanceShoulderingStartTime = Time.time;
+                
+                // Play aiming rattle sound on stance change
+                PlayStanceChangeSound(gameWorld.MainPlayer);
+            }
+            
+            // End stance shouldering phase when duration exceeded or started aiming
+            if (isAiming)
+            {
+                _isInStanceShoulderingPhase = false;
+            }
+            else if (_isInStanceShoulderingPhase)
+            {
+                if (Time.time - _stanceShoulderingStartTime >= stanceThrowDuration)
+                {
+                    _isInStanceShoulderingPhase = false;
+                }
+            }
+            
+            // Update previous stance tracker
+            _previousStance = currentStance;
+            
             // Calculate transition speed for SmoothDamp
             float transitionSpeed;
             if (_isInShoulderingPhase)
             {
                 transitionSpeed = throwSpeed;
+            }
+            else if (_isInStanceShoulderingPhase)
+            {
+                transitionSpeed = stanceThrowSpeed;
             }
             else if (isAiming && advancedADSEnabled)
             {
@@ -197,28 +276,46 @@ namespace CameraRotationMod.Patches
             }
             else if (isAiming)
             {
-                // Non-advanced ADS transition also benefits from weapon scaling if enabled
+                // Non-advanced ADS transition: base speed scaled by weapon stats if enabled
                 float baseADSSpeed = Plugin._ADSTransitionSpeed?.Value ?? 2f;
                 transitionSpeed = scaleByWeaponStats ? (baseADSSpeed * aimingSpeedMultiplier) : baseADSSpeed;
             }
             else
             {
-                transitionSpeed = Plugin._StanceTransitionSpeed?.Value ?? 1f;
+                // Stance transition: base speed scaled by weapon stats if advanced stance transitions enabled
+                float baseStanceSpeed = Plugin._StanceTransitionSpeed?.Value ?? 1f;
+                transitionSpeed = (advancedADSEnabled && affectStanceTransition) 
+                    ? (baseStanceSpeed * stanceAimingSpeedMultiplier) 
+                    : baseStanceSpeed;
             }
             // Convert transition speed to SmoothDamp smoothTime
             // Higher transitionSpeed = faster approach = lower smoothTime
             float smoothTime = SpeedToSmoothTime(transitionSpeed);
             
-            // Apply shouldering offset during throw phase
-            Vector3 shoulderingOffset = Vector3.zero;
+            // Apply shouldering offset during throw phase (ADS or stance transition)
+            Vector3 shoulderingPositionOffset = Vector3.zero;
+            Vector3 shoulderingRotationOffset = Vector3.zero;
+            
+            // Get overall throw intensity multipliers
+            float adsThrowIntensity = Plugin._ADSShoulderThrowIntensity?.Value ?? 1f;
+            float stanceThrowIntensity = Plugin._StanceShoulderThrowIntensity?.Value ?? 1f;
+            
             if (_isInShoulderingPhase)
             {
-                shoulderingOffset = new Vector3(0f, throwUp, throwForward);
+                shoulderingPositionOffset = new Vector3(0f, throwUp * adsThrowIntensity, throwForward * adsThrowIntensity);
+                shoulderingRotationOffset = new Vector3(throwPitch * adsThrowIntensity, throwYaw * adsThrowIntensity, throwRoll * adsThrowIntensity);
+            }
+            else if (_isInStanceShoulderingPhase)
+            {
+                // Invert vertical movement for stance transitions (weapon moves closer instead of away)
+                shoulderingPositionOffset = new Vector3(0f, stanceThrowUp * stanceThrowIntensity, stanceThrowForward * stanceThrowIntensity);
+                shoulderingRotationOffset = new Vector3(stanceThrowPitch * stanceThrowIntensity, stanceThrowYaw * stanceThrowIntensity, stanceThrowRoll * stanceThrowIntensity);
             }
             
             // ALWAYS update targets to match desired state (for real-time slider adjustments)
             _targetRotation = desiredRotation;
-            _targetPosition = desiredPosition + shoulderingOffset;
+            _targetPosition = desiredPosition + shoulderingPositionOffset;
+            _targetShoulderingRotation = shoulderingRotationOffset;
             
             if (stateChanged)
             {
@@ -243,6 +340,7 @@ namespace CameraRotationMod.Patches
             // Use Unity's SmoothDamp - mathematically stable at any frame rate
             _currentRotation = Vector3.SmoothDamp(_currentRotation, _targetRotation, ref _rotationVelocity, smoothTime, Mathf.Infinity, deltaTime);
             _currentPosition = Vector3.SmoothDamp(_currentPosition, _targetPosition, ref _positionVelocity, smoothTime, Mathf.Infinity, deltaTime);
+            _currentShoulderingRotation = Vector3.SmoothDamp(_currentShoulderingRotation, _targetShoulderingRotation, ref _shoulderingRotationVelocity, smoothTime, Mathf.Infinity, deltaTime);
             
             // When very close to target, snap to target to prevent micro-jitter
             const float positionSnapThreshold = 0.0001f;  // 0.1mm
@@ -257,16 +355,57 @@ namespace CameraRotationMod.Patches
             {
                 _currentPosition = _targetPosition;
             }
+            
+            if (Vector3.SqrMagnitude(_currentShoulderingRotation - _targetShoulderingRotation) < rotationSnapThreshold * rotationSnapThreshold)
+            {
+                _currentShoulderingRotation = _targetShoulderingRotation;
+            }
 
             // Apply the interpolated values based on which spring this is
             if (isRotationSpring)
             {
-                __result = _currentRotation + __instance.Current;
+                // Add both the stance/ADS rotation AND the shouldering rotation offset
+                __result = _currentRotation + _currentShoulderingRotation + __instance.Current;
             }
             else if (isPositionSpring)
             {
                 __result = _currentPosition + __instance.Current;
             }
         }
+        
+        /// <summary>
+        /// Play the aim rattle sound when changing stances (same sound as when ADS)
+        /// </summary>
+        private static void PlayStanceChangeSound(Player player)
+        {
+            if (player?.HandsController is Player.FirearmController fc)
+            {
+                var soundPlayer = fc.WeaponSoundPlayer;
+                if (soundPlayer != null)
+                {
+                    // Get user-configured volume multiplier (0 = mute, 1 = normal, 2 = louder)
+                    float volumeMultiplier = Plugin._StanceChangeSoundVolume?.Value ?? 1f;
+                    if (volumeMultiplier <= 0f) return; // Skip if muted
+                    
+                    // Calculate volume similar to EFT's CalculateAimingSoundVolume
+                    // TotalErgonomics / 100 - 1, clamped and scaled
+                    float ergo = fc.TotalErgonomics / 100f - 1f;
+                    float volume = Mathf.Clamp(ergo * ergo, 0.1f, 0.2f);
+                    
+                    // Apply covert movement modifier if available
+                    if (player.MovementContext != null)
+                    {
+                        volume *= player.MovementContext.CovertEquipmentNoise;
+                    }
+                    
+                    // Apply user volume multiplier
+                    volume *= volumeMultiplier;
+                    
+                    soundPlayer.PlayAimingSound(volume);
+                }
+            }
+        }
+        
+        /// <summary>
     }
 }
