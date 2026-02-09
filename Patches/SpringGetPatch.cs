@@ -46,6 +46,11 @@ namespace CameraRotationMod.Patches
         private static Vector3 _targetShoulderingRotation = Vector3.zero;
         private static Vector3 _shoulderingRotationVelocity = Vector3.zero;
         
+        // Camera throw state (rotation only - no position)
+        private static Vector3 _currentCameraRotation = Vector3.zero;
+        private static Vector3 _targetCameraRotation = Vector3.zero;
+        private static Vector3 _cameraRotationVelocity = Vector3.zero;
+        
         /// <summary>
         /// Reset all state - called when entering new raid or GameWorld changes
         /// </summary>
@@ -69,6 +74,9 @@ namespace CameraRotationMod.Patches
             _currentShoulderingRotation = Vector3.zero;
             _targetShoulderingRotation = Vector3.zero;
             _shoulderingRotationVelocity = Vector3.zero;
+            _currentCameraRotation = Vector3.zero;
+            _targetCameraRotation = Vector3.zero;
+            _cameraRotationVelocity = Vector3.zero;
         }
         
         protected override MethodBase GetTargetMethod()
@@ -106,13 +114,28 @@ namespace CameraRotationMod.Patches
             var pwa = gameWorld.MainPlayer.ProceduralWeaponAnimation;
             var handsRotation = pwa.HandsContainer.HandsRotation;
             var handsPosition = pwa.HandsContainer.HandsPosition;
+            
+            // Get camera springs from ForceReact (rotation only)
+            var cameraRotation = pwa.ForceReact?.CameraRotationSpring;
 
-            // Early exit if this spring is not one we care about (hands only, camera handled in PlayerSpringPatch)
-            if (__instance != handsRotation && __instance != handsPosition)
+            // Identify which spring type we're dealing with
+            bool isHandsRotationSpring = __instance == handsRotation;
+            bool isHandsPositionSpring = __instance == handsPosition;
+            bool isCameraRotationSpring = __instance == cameraRotation;
+            
+            // Early exit if this spring is not one we care about
+            if (!isHandsRotationSpring && !isHandsPositionSpring && !isCameraRotationSpring)
+                return;
+            
+            // Check if camera throw is enabled (for camera springs)
+            bool cameraThrowEnabled = Plugin._EnableCameraThrow?.Value ?? false;
+            
+            // For camera springs, only proceed if camera throw is enabled
+            if (isCameraRotationSpring && !cameraThrowEnabled)
                 return;
 
-            bool isRotationSpring = __instance == handsRotation;
-            bool isPositionSpring = __instance == handsPosition;
+            bool isRotationSpring = isHandsRotationSpring;
+            bool isPositionSpring = isHandsPositionSpring;
             
             // Check if any features are actually enabled
             bool resetOnADSEnabled = Plugin._ResetOnADS?.Value ?? false;
@@ -312,6 +335,53 @@ namespace CameraRotationMod.Patches
                 shoulderingRotationOffset = new Vector3(stanceThrowPitch * stanceThrowIntensity, stanceThrowYaw * stanceThrowIntensity, stanceThrowRoll * stanceThrowIntensity);
             }
             
+            // Calculate camera throw rotation offset (rotation only - no position)
+            Vector3 cameraThrowRotationOffset = Vector3.zero;
+            
+            if (cameraThrowEnabled && (_isInShoulderingPhase || _isInStanceShoulderingPhase))
+            {
+                // Get camera throw rotation config values
+                float baseCamThrowPitch = Plugin._CameraThrowPitch?.Value ?? -1f;
+                float baseCamThrowYaw = Plugin._CameraThrowYaw?.Value ?? 0f;
+                float baseCamThrowRoll = Plugin._CameraThrowRoll?.Value ?? 0f;
+                
+                // Get camera throw intensity multipliers
+                float adsCamThrowIntensity = Plugin._ADSCameraThrowIntensity?.Value ?? 1f;
+                float stanceCamThrowIntensity = Plugin._StanceCameraThrowIntensity?.Value ?? 0.75f;
+                
+                // Get camera throw weapon stats scaling
+                bool scaleCamByWeaponStats = Plugin._ScaleCameraThrowByWeaponStats?.Value ?? true;
+                float camWeaponStatsIntensity = Plugin._CameraThrowWeaponStatsIntensity?.Value ?? 1f;
+                
+                // Calculate camera throw weapon scaling
+                float camInverseAimingSpeed = scaleCamByWeaponStats 
+                    ? Mathf.LerpUnclamped(1f, rawInverseAimingSpeed, camWeaponStatsIntensity) 
+                    : 1f;
+                
+                // Apply scaling to base values
+                float camThrowPitch = baseCamThrowPitch * camInverseAimingSpeed;
+                float camThrowYaw = baseCamThrowYaw * camInverseAimingSpeed;
+                float camThrowRoll = baseCamThrowRoll * camInverseAimingSpeed;
+                
+                if (_isInShoulderingPhase)
+                {
+                    cameraThrowRotationOffset = new Vector3(
+                        camThrowPitch * adsCamThrowIntensity,
+                        camThrowYaw * adsCamThrowIntensity,
+                        camThrowRoll * adsCamThrowIntensity);
+                }
+                else if (_isInStanceShoulderingPhase)
+                {
+                    cameraThrowRotationOffset = new Vector3(
+                        camThrowPitch * stanceCamThrowIntensity,
+                        camThrowYaw * stanceCamThrowIntensity,
+                        camThrowRoll * stanceCamThrowIntensity);
+                }
+            }
+            
+            // Update camera throw rotation target
+            _targetCameraRotation = cameraThrowRotationOffset;
+            
             // ALWAYS update targets to match desired state (for real-time slider adjustments)
             _targetRotation = desiredRotation;
             _targetPosition = desiredPosition + shoulderingPositionOffset;
@@ -342,6 +412,9 @@ namespace CameraRotationMod.Patches
             _currentPosition = Vector3.SmoothDamp(_currentPosition, _targetPosition, ref _positionVelocity, smoothTime, Mathf.Infinity, deltaTime);
             _currentShoulderingRotation = Vector3.SmoothDamp(_currentShoulderingRotation, _targetShoulderingRotation, ref _shoulderingRotationVelocity, smoothTime, Mathf.Infinity, deltaTime);
             
+            // SmoothDamp for camera throw rotation
+            _currentCameraRotation = Vector3.SmoothDamp(_currentCameraRotation, _targetCameraRotation, ref _cameraRotationVelocity, smoothTime, Mathf.Infinity, deltaTime);
+            
             // When very close to target, snap to target to prevent micro-jitter
             const float positionSnapThreshold = 0.0001f;  // 0.1mm
             const float rotationSnapThreshold = 0.01f;    // 0.01 degrees
@@ -360,16 +433,26 @@ namespace CameraRotationMod.Patches
             {
                 _currentShoulderingRotation = _targetShoulderingRotation;
             }
+            
+            if (Vector3.SqrMagnitude(_currentCameraRotation - _targetCameraRotation) < rotationSnapThreshold * rotationSnapThreshold)
+            {
+                _currentCameraRotation = _targetCameraRotation;
+            }
 
             // Apply the interpolated values based on which spring this is
-            if (isRotationSpring)
+            if (isHandsRotationSpring)
             {
                 // Add both the stance/ADS rotation AND the shouldering rotation offset
                 __result = _currentRotation + _currentShoulderingRotation + __instance.Current;
             }
-            else if (isPositionSpring)
+            else if (isHandsPositionSpring)
             {
                 __result = _currentPosition + __instance.Current;
+            }
+            else if (isCameraRotationSpring)
+            {
+                // Camera rotation throw during shouldering phases
+                __result = _currentCameraRotation + __instance.Current;
             }
         }
         

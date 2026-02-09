@@ -125,6 +125,16 @@ public class Plugin : BaseUnityPlugin
     public static ConfigEntry<float> _ADSShoulderThrowPitch;
     public static ConfigEntry<float> _ADSShoulderThrowRoll;
 
+    // Camera Throw (rotation offsets for camera during transitions)
+    public static ConfigEntry<bool> _EnableCameraThrow;
+    public static ConfigEntry<float> _CameraThrowPitch;
+    public static ConfigEntry<float> _CameraThrowYaw;
+    public static ConfigEntry<float> _CameraThrowRoll;
+    public static ConfigEntry<float> _ADSCameraThrowIntensity;
+    public static ConfigEntry<float> _StanceCameraThrowIntensity;
+    public static ConfigEntry<bool> _ScaleCameraThrowByWeaponStats;
+    public static ConfigEntry<float> _CameraThrowWeaponStatsIntensity;
+
     public void Awake()
     {
         Logger = base.Logger;
@@ -277,6 +287,71 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Roll rotation during throw phase (degrees). Positive = tilt right. Applied to both ADS and stance transitions.",
             new AcceptableValueRange<float>(-15f, 15f),
             new ConfigurationManagerAttributes { IsAdvanced = true, Order = -4 }));
+
+        // Camera Throw Settings (within Advanced ADS Transitions)
+        _EnableCameraThrow = Config.Bind(
+            AdvancedADSSettings,
+            "Enable Camera Throw",
+            true,
+            new ConfigDescription("When enabled, camera itself moves/rotates during ADS and stance transitions (separate from weapon throw).",
+            null,
+            new ConfigurationManagerAttributes { Order = -5 }));
+
+        _ADSCameraThrowIntensity = Config.Bind(
+            AdvancedADSSettings,
+            "ADS Camera Throw Intensity",
+            1f,
+            new ConfigDescription("Overall intensity of camera throw during ADS. 0 = no throw, 1 = use config values, 2 = double effect.",
+            new AcceptableValueRange<float>(0f, 2f),
+            new ConfigurationManagerAttributes { Order = -6 }));
+
+        _StanceCameraThrowIntensity = Config.Bind(
+            AdvancedADSSettings,
+            "Stance Camera Throw Intensity",
+            0.5f,
+            new ConfigDescription("Overall intensity of camera throw during stance transitions. 0 = no throw, 1 = use config values, 2 = double effect.",
+            new AcceptableValueRange<float>(0f, 2f),
+            new ConfigurationManagerAttributes { Order = -7 }));
+
+        _ScaleCameraThrowByWeaponStats = Config.Bind(
+            AdvancedADSSettings,
+            "Scale Camera Throw by Weapon Stats",
+            true,
+            new ConfigDescription("When enabled, camera throw scales with weapon weight/ergonomics. Heavy/low-ergo = stronger camera movement.",
+            null,
+            new ConfigurationManagerAttributes { Order = -8 }));
+
+        _CameraThrowWeaponStatsIntensity = Config.Bind(
+            AdvancedADSSettings,
+            "Camera Throw Weapon Stats Intensity",
+            1f,
+            new ConfigDescription("How strongly weapon stats affect camera throw. 0 = no scaling, 1 = normal, 2 = exaggerated.",
+            new AcceptableValueRange<float>(0f, 2f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = -9 }));
+
+        _CameraThrowPitch = Config.Bind(
+            AdvancedADSSettings,
+            "Camera Throw Pitch",
+            -3f,
+            new ConfigDescription("Camera pitch rotation during throw (degrees). Positive = look up.",
+            new AcceptableValueRange<float>(-10f, 10f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = -10 }));
+
+        _CameraThrowYaw = Config.Bind(
+            AdvancedADSSettings,
+            "Camera Throw Yaw",
+            0f,
+            new ConfigDescription("Camera yaw rotation during throw (degrees). Positive = look right.",
+            new AcceptableValueRange<float>(-10f, 10f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = -11 }));
+
+        _CameraThrowRoll = Config.Bind(
+            AdvancedADSSettings,
+            "Camera Throw Roll",
+            0f,
+            new ConfigDescription("Camera roll rotation during throw (degrees). Positive = tilt right.",
+            new AcceptableValueRange<float>(-10f, 10f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = -12 }));
 
         _ADSTransitionSpeed = Config.Bind(
             Settings,

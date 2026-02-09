@@ -52,7 +52,7 @@ Create up to **3 unique weapon ready positions**, each with:
   - Settle speed to ADS position
 
 ### Fully Configurable
-- All settings adjustable in-game via **BepInEx Configuration Manager** (F1)
+- All settings adjustable in-game via **BepInEx Configuration Manager** (F12)
 - No file editing required - tweak values and see changes instantly
 - Advanced settings available for fine-tuning
 
@@ -61,7 +61,7 @@ Create up to **3 unique weapon ready positions**, each with:
 1. Download the release or build from source
 2. Copy `shwngFpsCameraStances4.dll` to `BepInEx/plugins/`
 3. Launch the game
-4. Press F1 to open Configuration Manager and customize settings
+4. Press F12 to open Configuration Manager and customize settings
 
 ## Configuration Options
 
