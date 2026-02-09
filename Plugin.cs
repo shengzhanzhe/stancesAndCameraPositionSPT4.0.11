@@ -105,6 +105,9 @@ public class Plugin : BaseUnityPlugin
     // Advanced ADS Transition (Shouldering Effect)
     private const string AdvancedADSSettings = "Advanced ADS Transitions";
     public static ConfigEntry<bool> _EnableAdvancedADSTransitions;
+    public static ConfigEntry<bool> _AffectStanceTransitionToo;
+    public static ConfigEntry<float> _StanceChangeSoundVolume;
+    public static ConfigEntry<float> _AdvancedStanceTransitionIntensity;
     public static ConfigEntry<bool> _ScaleByWeaponStats;
     public static ConfigEntry<float> _WeaponStatsScaleIntensity;
     public static ConfigEntry<float> _ADSShoulderThrowForward;
@@ -112,6 +115,15 @@ public class Plugin : BaseUnityPlugin
     public static ConfigEntry<float> _ADSShoulderThrowDuration;
     public static ConfigEntry<float> _ADSShoulderThrowSpeed;
     public static ConfigEntry<float> _ADSShoulderSettleSpeed;
+
+    // Overall throw intensity multipliers
+    public static ConfigEntry<float> _ADSShoulderThrowIntensity;
+    public static ConfigEntry<float> _StanceShoulderThrowIntensity;
+
+    // Rotation throw (yaw, pitch, roll) for ADS/Stance shouldering
+    public static ConfigEntry<float> _ADSShoulderThrowYaw;
+    public static ConfigEntry<float> _ADSShoulderThrowPitch;
+    public static ConfigEntry<float> _ADSShoulderThrowRoll;
 
     public void Awake()
     {
@@ -140,11 +152,51 @@ public class Plugin : BaseUnityPlugin
         // Advanced ADS Transitions (Shouldering Effect)
         _EnableAdvancedADSTransitions = Config.Bind(
             AdvancedADSSettings,
-            "Enable Advanced ADS Transitions",
+            "Advanced ADS Transitions",
             false,
             new ConfigDescription("When enabled, weapon is thrown forward then pushed back when aiming to simulate shouldering",
             null,
+            new ConfigurationManagerAttributes { Order = 8 }));
+
+        _AffectStanceTransitionToo = Config.Bind(
+            AdvancedADSSettings,
+            "Affect Stance Transition Too",
+            true,
+            new ConfigDescription("When enabled (requires 'Advanced ADS Transitions'), applies the same shouldering effect when switching between stances",
+            null,
+            new ConfigurationManagerAttributes { Order = 8 }));
+
+        _ADSShoulderThrowIntensity = Config.Bind(
+            AdvancedADSSettings,
+            "ADS Shoulder Throw Intensity",
+            1f,
+            new ConfigDescription("Overall intensity of ADS throw effect. Multiplies Forward, Up, Yaw, Pitch, Roll amounts. 0 = no throw, 1 = use config values, 2 = double effect.",
+            new AcceptableValueRange<float>(0f, 2f),
             new ConfigurationManagerAttributes { Order = 7 }));
+
+        _StanceShoulderThrowIntensity = Config.Bind(
+            AdvancedADSSettings,
+            "Stance Shoulder Throw Intensity",
+            0.75f,
+            new ConfigDescription("Overall intensity of stance switch throw effect. Multiplies Forward, Up, Yaw, Pitch, Roll amounts. 0 = no throw, 1 = use config values, 2 = double effect.",
+            new AcceptableValueRange<float>(0f, 2f),
+            new ConfigurationManagerAttributes { Order = 6 }));
+
+        _StanceChangeSoundVolume = Config.Bind(
+            AdvancedADSSettings,
+            "Stance Change Sound Volume",
+            1f,
+            new ConfigDescription("Volume multiplier for the aim rattle sound when switching stances. 0 = muted, 1 = normal, 2 = louder. Requires 'Affect Stance Transition Too' enabled.",
+            new AcceptableValueRange<float>(0f, 2f),
+            new ConfigurationManagerAttributes { Order = 5 }));
+
+        _AdvancedStanceTransitionIntensity = Config.Bind(
+            AdvancedADSSettings,
+            "Advanced Stance Transition Stat Intensity",
+            1f,
+            new ConfigDescription("How strongly weapon weight/ergonomics affects stance transition speed and shouldering. 0.01 = minimal effect, 1 = normal, 2 = exaggerated. Works when 'Affect Stance Transition Too' is enabled.",
+            new AcceptableValueRange<float>(0.01f, 2f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 4 }));
 
         _ScaleByWeaponStats = Config.Bind(
             AdvancedADSSettings,
@@ -152,15 +204,15 @@ public class Plugin : BaseUnityPlugin
             true,
             new ConfigDescription("When enabled, shouldering speed/duration/amount scales with weapon weight and ergonomics (uses EFT's AimingSpeed calculation). Heavy/low-ergo = slower, dramatic. Light/high-ergo = fast, subtle. Needs Enable Advanced ADS Transitions enabled to have an effect.",
             null,
-            new ConfigurationManagerAttributes { Order = 7 }));
+            new ConfigurationManagerAttributes { Order = 3 }));
 
         _WeaponStatsScaleIntensity = Config.Bind(
             AdvancedADSSettings,
-            "Weapon Stats Scale Intensity",
+            "Advanced ADS Transition Stat Intensity",
             1f,
-            new ConfigDescription("How strongly weapon stats affect shouldering. 0 = no scaling (all weapons same), 1 = normal, 2 = exaggerated difference between light/heavy weapons.",
+            new ConfigDescription("How strongly weapon stats affect ADS shouldering. 0 = no scaling (all weapons same), 1 = normal, 2 = exaggerated difference between light/heavy weapons.",
             new AcceptableValueRange<float>(0f, 2f),
-            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 6 }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 2 }));
 
         _ADSShoulderThrowForward = Config.Bind(
             AdvancedADSSettings,
@@ -168,7 +220,7 @@ public class Plugin : BaseUnityPlugin
             0.02f,
             new ConfigDescription("Base forward throw distance. With 'Scale by Weapon Stats' enabled, this is multiplied by inverse AimingSpeed (heavy weapons throw more).",
             new AcceptableValueRange<float>(0f, 0.3f),
-            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 5 }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 3 }));
 
         _ADSShoulderThrowUp = Config.Bind(
             AdvancedADSSettings,
@@ -176,7 +228,7 @@ public class Plugin : BaseUnityPlugin
             -0.015f,
             new ConfigDescription("Base vertical offset during throw. Negative = down. With 'Scale by Weapon Stats', scales with inverse AimingSpeed.",
             new AcceptableValueRange<float>(-0.15f, 0.15f),
-            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 4 }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 2 }));
 
         _ADSShoulderThrowDuration = Config.Bind(
             AdvancedADSSettings,
@@ -184,7 +236,7 @@ public class Plugin : BaseUnityPlugin
             0.15f,
             new ConfigDescription("Base throw phase duration (seconds). With 'Scale by Weapon Stats', heavy weapons have longer duration.",
             new AcceptableValueRange<float>(0.01f, 0.5f),
-            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 3 }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 1 }));
 
         _ADSShoulderThrowSpeed = Config.Bind(
             AdvancedADSSettings,
@@ -192,7 +244,7 @@ public class Plugin : BaseUnityPlugin
             2f,
             new ConfigDescription("Base speed of throw motion. With 'Scale by Weapon Stats', multiplied by AimingSpeed (light weapons = faster).",
             new AcceptableValueRange<float>(0.5f, 5f),
-            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 2 }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 0 }));
 
         _ADSShoulderSettleSpeed = Config.Bind(
             AdvancedADSSettings,
@@ -200,7 +252,31 @@ public class Plugin : BaseUnityPlugin
             1.5f,
             new ConfigDescription("Base speed of settling to ADS. With 'Scale by Weapon Stats', multiplied by AimingSpeed.",
             new AcceptableValueRange<float>(0.5f, 5f),
-            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 1 }));
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = -1 }));
+
+        _ADSShoulderThrowYaw = Config.Bind(
+            AdvancedADSSettings,
+            "Shoulder Throw Yaw",
+            6f,
+            new ConfigDescription("Yaw rotation during throw phase (degrees). Positive = rotate right. Applied to both ADS and stance transitions.",
+            new AcceptableValueRange<float>(-15f, 15f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = -2 }));
+
+        _ADSShoulderThrowPitch = Config.Bind(
+            AdvancedADSSettings,
+            "Shoulder Throw Pitch",
+            -3f,
+            new ConfigDescription("Pitch rotation during throw phase (degrees). Positive = rotate up. Applied to both ADS and stance transitions.",
+            new AcceptableValueRange<float>(-15f, 15f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = -3 }));
+
+        _ADSShoulderThrowRoll = Config.Bind(
+            AdvancedADSSettings,
+            "Shoulder Throw Roll",
+            -1.5f,
+            new ConfigDescription("Roll rotation during throw phase (degrees). Positive = tilt right. Applied to both ADS and stance transitions.",
+            new AcceptableValueRange<float>(-15f, 15f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = -4 }));
 
         _ADSTransitionSpeed = Config.Bind(
             Settings,

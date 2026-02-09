@@ -39,9 +39,13 @@ Create up to **3 unique weapon ready positions**, each with:
 ### Advanced ADS Transitions (Shouldering Effect)
 - Optional weapon shouldering animation when aiming down sights
 - Simulates the physical motion of bringing a weapon up to aim (Modern Warfare style)
+- **Affect Stance Transitions**: Apply the same shouldering effect when switching between stances
+  - Separate intensity slider for stance transitions
+  - Plays aim rattle sound on stance change (adjustable volume)
 - **Weapon Stats Scaling**: Automatically adjusts based on weapon weight and ergonomics
   - Heavy/low-ergo weapons = slower, more dramatic shouldering
   - Light/high-ergo weapons = fast, subtle shouldering
+  - Speed sliders act as base values that get scaled by weapon stats
 - Fully customizable throw and settle phases:
   - Forward/upward throw amounts
   - Throw duration and speed
@@ -78,10 +82,18 @@ Create up to **3 unique weapon ready positions**, each with:
 | Option | Default | Description |
 |--------|---------|-------------|
 | Enable Advanced ADS Transitions | false | Enable shouldering effect when aiming |
-| Scale by Weapon Stats | true | Adjust effect based on weapon weight/ergonomics |
-| Weapon Stats Scale Intensity | 1 | How strongly weapon stats affect shouldering (0-2) |
+| Affect Stance Transition Too | true | Apply shouldering effect to stance transitions |
+| ADS Shoulder Throw Intensity | 1 | Overall intensity of ADS throw effect (0-2) |
+| Stance Shoulder Throw Intensity | 0.75 | Overall intensity of stance throw effect (0-2) |
+| Stance Change Sound Volume | 1 | Volume of aim rattle sound on stance switch (0-2) |
+| Advanced Stance Transition Intensity | 1 | How strongly weapon stats affect stance transitions (0.01-2) |
+| Scale by Weapon Stats | true | Adjust ADS effect based on weapon weight/ergonomics |
+| Weapon Stats Scale Intensity | 1 | How strongly weapon stats affect ADS shouldering (0-2) |
 | Shoulder Throw Forward Amount | 0.02 | Forward throw distance (0-0.3) |
 | Shoulder Throw Up Amount | -0.015 | Vertical offset during throw (-0.15 to 0.15) |
+| Shoulder Throw Yaw | 6 | Yaw rotation during throw (-15 to 15 degrees) |
+| Shoulder Throw Pitch | -3 | Pitch rotation during throw (-15 to 15 degrees) |
+| Shoulder Throw Roll | -1.5 | Roll rotation during throw (-15 to 15 degrees) |
 | Shoulder Throw Duration | 0.15 | Throw phase duration in seconds (0.01-0.5) |
 | Shoulder Throw Speed | 2 | Speed of throw motion (0.5-5) |
 | Shoulder Settle Speed | 1.5 | Speed of settling to ADS (0.5-5) |
@@ -111,10 +123,7 @@ Each stance (1, 2, 3) has:
 - It's possible to switch stances while running - because of that, if a stance has tactical sprint enabled, the weapon instantly switches to tactical sprint mode
 - Very Rarely, using very high position/rotation offsets causes shouldering the weapon to take full stamina
 - ~~Rarely, extreme position/rotation offsets may cause the weapon to briefly fly out of hand (2-3 frames) before safeguard logic corrects it~~ Fixed after physics update
-
-## Planned Features
-- Add "aim rattle" sound effect when switching stances
-- Make stance transition to use same "shouldering" effect from advanced ads behaviour
+- ~~Add "aim rattle" sound effect when switching stances~~ Implemented with adjustable volume
 
 ## Compatibility
 

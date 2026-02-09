@@ -51,7 +51,6 @@ namespace CameraRotationMod
             if (isKeyPressed && !_wasKeyPressed)
             {
                 CurrentStance = GetNextStance(CurrentStance);
-                Plugin.Logger.LogInfo($"Stance changed to: {CurrentStance}");
             }
             
             _wasKeyPressed = isKeyPressed;
@@ -71,13 +70,11 @@ namespace CameraRotationMod
                         {
                             // Scroll up - cycle forward
                             CurrentStance = GetNextStance(CurrentStance);
-                            Plugin.Logger.LogInfo($"Stance changed to: {CurrentStance} (scroll up)");
                         }
                         else
                         {
                             // Scroll down - cycle backward
                             CurrentStance = GetPreviousStance(CurrentStance);
-                            Plugin.Logger.LogInfo($"Stance changed to: {CurrentStance} (scroll down)");
                         }
                         _lastScrollTime = Time.time;
                     }
