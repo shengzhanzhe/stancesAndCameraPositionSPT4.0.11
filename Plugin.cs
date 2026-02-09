@@ -295,7 +295,7 @@ public class Plugin : BaseUnityPlugin
         _UseOnlyStances = Config.Bind(
             Settings,
             "Use Only Stances",
-            false,
+            true,
             new ConfigDescription("When enabled, cycle skips Default (non-stance) position and only cycles through enabled stances"));
 
         // Camera Position Offsets
@@ -338,7 +338,7 @@ public class Plugin : BaseUnityPlugin
         _EnableStance3 = Config.Bind(
             Settings,
             "Enable Stance 3 in Cycle",
-            false,
+            true,
             new ConfigDescription("When enabled, Stance 3 is included in the stance cycle. When disabled, Stance 3 is skipped."));
 
         _EnableMouseWheelCycle = Config.Bind(
