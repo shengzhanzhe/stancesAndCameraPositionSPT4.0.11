@@ -153,7 +153,7 @@ public class Plugin : BaseUnityPlugin
         _EnableAdvancedADSTransitions = Config.Bind(
             AdvancedADSSettings,
             "Advanced ADS Transitions",
-            false,
+            true,
             new ConfigDescription("When enabled, weapon is thrown forward then pushed back when aiming to simulate shouldering",
             null,
             new ConfigurationManagerAttributes { Order = 8 }));
