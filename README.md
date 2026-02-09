@@ -36,6 +36,17 @@ Create up to **3 unique weapon ready positions**, each with:
 - Customizable ADS hand positions and rotations
 - Adjustable transition speed for smooth or snappy feel
 
+### Advanced ADS Transitions (Shouldering Effect)
+- Optional weapon shouldering animation when aiming down sights
+- Simulates the physical motion of bringing a weapon up to aim (Modern Warfare style)
+- **Weapon Stats Scaling**: Automatically adjusts based on weapon weight and ergonomics
+  - Heavy/low-ergo weapons = slower, more dramatic shouldering
+  - Light/high-ergo weapons = fast, subtle shouldering
+- Fully customizable throw and settle phases:
+  - Forward/upward throw amounts
+  - Throw duration and speed
+  - Settle speed to ADS position
+
 ### Fully Configurable
 - All settings adjustable in-game via **BepInEx Configuration Manager** (F1)
 - No file editing required - tweak values and see changes instantly
@@ -63,6 +74,18 @@ Create up to **3 unique weapon ready positions**, each with:
 | Enable Stance 1/2/3 in Cycle | true/true/false | Include each stance in the cycle |
 | Stance Transition Speed | 1 | Speed of stance transitions (0.5-20) |
 
+### Advanced ADS Transitions Settings
+| Option | Default | Description |
+|--------|---------|-------------|
+| Enable Advanced ADS Transitions | false | Enable shouldering effect when aiming |
+| Scale by Weapon Stats | true | Adjust effect based on weapon weight/ergonomics |
+| Weapon Stats Scale Intensity | 1 | How strongly weapon stats affect shouldering (0-2) |
+| Shoulder Throw Forward Amount | 0.02 | Forward throw distance (0-0.3) |
+| Shoulder Throw Up Amount | -0.015 | Vertical offset during throw (-0.15 to 0.15) |
+| Shoulder Throw Duration | 0.15 | Throw phase duration in seconds (0.01-0.5) |
+| Shoulder Throw Speed | 2 | Speed of throw motion (0.5-5) |
+| Shoulder Settle Speed | 1.5 | Speed of settling to ADS (0.5-5) |
+
 ### Per-Stance Settings
 Each stance (1, 2, 3) has:
 - **Rotation**: Pitch, Yaw, Roll (-45 to +45 degrees)
@@ -88,6 +111,10 @@ Each stance (1, 2, 3) has:
 - It's possible to switch stances while running - because of that, if a stance has tactical sprint enabled, the weapon instantly switches to tactical sprint mode
 - Very Rarely, using very high position/rotation offsets causes shouldering the weapon to take full stamina
 - ~~Rarely, extreme position/rotation offsets may cause the weapon to briefly fly out of hand (2-3 frames) before safeguard logic corrects it~~ Fixed after physics update
+
+## Planned Features
+- Add "aim rattle" sound effect when switching stances
+- Make stance transition to use same "shouldering" effect from advanced ads behaviour
 
 ## Compatibility
 
