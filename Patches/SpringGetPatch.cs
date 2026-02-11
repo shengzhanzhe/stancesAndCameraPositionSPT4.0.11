@@ -18,6 +18,7 @@ namespace CameraRotationMod.Patches
         // Track transition states
         private static bool _wasAiming = false;
         private static bool _wasInStance = false;
+        private static bool _wasHoldingFirearm = false;
         private static bool _isInitialized = false;
         
         // Track GameWorld to detect raid changes and reset state
@@ -57,6 +58,7 @@ namespace CameraRotationMod.Patches
         {
             _wasAiming = false;
             _wasInStance = false;
+            _wasHoldingFirearm = false;
             _isInitialized = false;
             _lastGameWorld = null;
             _isInShoulderingPhase = false;
@@ -128,7 +130,8 @@ namespace CameraRotationMod.Patches
             // we can skip all the expensive calculations and just apply cached values directly
             bool stateChanged = (isAiming != _wasAiming) || 
                                (StanceManager.IsInStance != _wasInStance) || 
-                               (currentStance != _previousStance);
+                               (currentStance != _previousStance) ||
+                               (isHoldingFirearm != _wasHoldingFirearm);
             
             if (_isStable && _isInitialized && !stateChanged)
             {
@@ -363,7 +366,7 @@ namespace CameraRotationMod.Patches
             _targetShoulderingRotation = shoulderingRotationOffset;
             
             // Recompute stateChanged with proper isInStance (includes firearm check)
-            bool stateChangedFull = (isAiming != _wasAiming) || (isInStance != _wasInStance);
+            bool stateChangedFull = (isAiming != _wasAiming) || (isInStance != _wasInStance) || (isHoldingFirearm != _wasHoldingFirearm);
             
             if (stateChangedFull)
             {
@@ -381,6 +384,7 @@ namespace CameraRotationMod.Patches
                 
                 _wasAiming = isAiming;
                 _wasInStance = isInStance;
+                _wasHoldingFirearm = isHoldingFirearm;
             }
             
             float deltaTime = Time.deltaTime;
