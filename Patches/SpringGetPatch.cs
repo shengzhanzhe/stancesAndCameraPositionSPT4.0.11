@@ -200,6 +200,12 @@ namespace CameraRotationMod.Patches
                     transitionSpeed = Plugin._StanceTransitionSpeed?.Value ?? 1f;
                 }
                 
+                // Play stance change sound (independent of Advanced ADS)
+                if (stanceChanged && isHoldingFirearm && !isAiming)
+                {
+                    PlayStanceChangeSound(gameWorld.MainPlayer);
+                }
+                
                 // Update previous stance tracker
                 _previousStance = currentStance;
             }
@@ -291,6 +297,11 @@ namespace CameraRotationMod.Patches
                 {
                     _isInStanceShoulderingPhase = true;
                     _stanceShoulderingStartTime = Time.time;
+                }
+                
+                // Play stance change sound (independent of Advanced ADS - but only in this branch to avoid duplicate)
+                if (stanceChanged && isHoldingFirearm && !isAiming)
+                {
                     PlayStanceChangeSound(gameWorld.MainPlayer);
                 }
                 
