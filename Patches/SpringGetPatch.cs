@@ -46,6 +46,10 @@ namespace CameraRotationMod.Patches
         private static Vector3 _targetShoulderingRotation = Vector3.zero;
         private static Vector3 _shoulderingRotationVelocity = Vector3.zero;
         
+        // Track if we're in a stable state (at target with no transitions)
+        private static bool _isStable = false;
+        private static bool _wasStable = false;
+        
         /// <summary>
         /// Reset all state - called when entering new raid or GameWorld changes
         /// </summary>
@@ -69,6 +73,8 @@ namespace CameraRotationMod.Patches
             _currentShoulderingRotation = Vector3.zero;
             _targetShoulderingRotation = Vector3.zero;
             _shoulderingRotationVelocity = Vector3.zero;
+            _isStable = false;
+            _wasStable = false;
         }
         
         protected override MethodBase GetTargetMethod()
@@ -91,8 +97,8 @@ namespace CameraRotationMod.Patches
         [PatchPostfix]
         private static void PatchPostfix(Spring __instance, ref Vector3 __result)
         {
-            // Check if this is a hands rotation or position spring we want to modify
-            var gameWorld = Singleton<GameWorld>.Instance;
+            // Use cached GameWorld from StanceManager to avoid multiple Singleton lookups
+            var gameWorld = StanceManager.GetCachedGameWorld();
             if (gameWorld?.MainPlayer?.ProceduralWeaponAnimation?.HandsContainer == null)
                 return;
             
@@ -114,11 +120,33 @@ namespace CameraRotationMod.Patches
             bool isRotationSpring = __instance == handsRotation;
             bool isPositionSpring = __instance == handsPosition;
             
+            bool isAiming = pwa.IsAiming;
+            bool isHoldingFirearm = StanceManager.IsHoldingFirearm();
+            Stance currentStance = StanceManager.CurrentStance;
+            
+            // FAST PATH: If we're stable (at target with no active transitions) and no state changed,
+            // we can skip all the expensive calculations and just apply cached values directly
+            bool stateChanged = (isAiming != _wasAiming) || 
+                               (StanceManager.IsInStance != _wasInStance) || 
+                               (currentStance != _previousStance);
+            
+            if (_isStable && _isInitialized && !stateChanged)
+            {
+                // Apply cached values directly - skip all transition logic
+                if (isRotationSpring)
+                {
+                    __result = _currentRotation + _currentShoulderingRotation + __instance.Current;
+                }
+                else if (isPositionSpring)
+                {
+                    __result = _currentPosition + __instance.Current;
+                }
+                return;
+            }
+            
             // Check if any features are actually enabled
             bool resetOnADSEnabled = Plugin._ResetOnADS?.Value ?? false;
             bool defaultPositionEnabled = Plugin._DefaultHandsPositionEnabled?.Value ?? false;
-            
-            bool isAiming = pwa.IsAiming;
             
             // Check if ANY feature is enabled that could potentially affect this spring
             // Stances are always enabled when in stance mode, so check if we're in a stance
@@ -133,7 +161,6 @@ namespace CameraRotationMod.Patches
                 return;
 
             // Check if player is holding a firearm - if not, force Default stance
-            bool isHoldingFirearm = StanceManager.IsHoldingFirearm();
             bool isInStance = isHoldingFirearm && StanceManager.IsInStance;
 
             // Use StanceManager to get target values based on current state
@@ -142,182 +169,192 @@ namespace CameraRotationMod.Patches
             Vector3 desiredRotation = isHoldingFirearm ? StanceManager.GetTargetRotation(isAiming) : Vector3.zero;
             Vector3 desiredPosition = isHoldingFirearm ? StanceManager.GetTargetPosition(isAiming) : Vector3.zero;
 
-            // Detect state changes (ADS or Stance toggle) to reinitialize spring
-            bool stateChanged = (isAiming != _wasAiming) || (isInStance != _wasInStance);
+            // justStartedAiming is used for shouldering trigger
             bool justStartedAiming = isAiming && !_wasAiming;
             
             // Detect stance change (different from just entering/exiting stance)
-            Stance currentStance = StanceManager.CurrentStance;
             bool stanceChanged = currentStance != _previousStance;
             
-            // Advanced ADS Transition (Shouldering Effect)
+            // Check if advanced ADS transitions are enabled EARLY to skip expensive calculations
             bool advancedADSEnabled = Plugin._EnableAdvancedADSTransitions?.Value ?? false;
-            bool scaleByWeaponStats = Plugin._ScaleByWeaponStats?.Value ?? true;
             
-            // Get EFT's calculated AimingSpeed (based on weapon weight + ergonomics)
-            // Typically ranges from ~0.4 (heavy/low ergo) to ~2.5+ (light/high ergo)
-            float eftAimingSpeed = pwa.AimingSpeed;
-            float scaleIntensity = Plugin._WeaponStatsScaleIntensity?.Value ?? 1f;
-            
-            // Calculate raw multipliers
-            float rawAimingSpeedMultiplier = eftAimingSpeed;
-            float rawInverseAimingSpeed = 1f / Mathf.Max(eftAimingSpeed, 0.5f);
-            
-            // Lerp between 1 (no effect) and full effect based on intensity
-            // 0 = no scaling, 1 = normal, 2 = exaggerated
-            float aimingSpeedMultiplier = scaleByWeaponStats ? Mathf.LerpUnclamped(1f, rawAimingSpeedMultiplier, scaleIntensity) : 1f;
-            float inverseAimingSpeed = scaleByWeaponStats ? Mathf.LerpUnclamped(1f, rawInverseAimingSpeed, scaleIntensity) : 1f;
-            
-            // Get base config values
-            float baseThrowDuration = Plugin._ADSShoulderThrowDuration?.Value ?? 0.15f;
-            float baseThrowSpeed = Plugin._ADSShoulderThrowSpeed?.Value ?? 2f;
-            float baseSettleSpeed = Plugin._ADSShoulderSettleSpeed?.Value ?? 1.5f;
-            float baseThrowForward = Plugin._ADSShoulderThrowForward?.Value ?? 0.02f;
-            float baseThrowUp = Plugin._ADSShoulderThrowUp?.Value ?? -0.015f;
-            
-            // Apply weapon stat scaling
-            // Duration: heavy weapons = longer duration (inverse of aiming speed)
-            float throwDuration = baseThrowDuration * inverseAimingSpeed;
-            // Speeds: light/high-ergo = faster (multiply by aiming speed)
-            float throwSpeed = baseThrowSpeed * aimingSpeedMultiplier;
-            float settleSpeed = baseSettleSpeed * aimingSpeedMultiplier;
-            // Throw amounts: heavy = more dramatic throw (inverse of aiming speed)
-            float throwForward = baseThrowForward * inverseAimingSpeed;
-            float throwUp = baseThrowUp * inverseAimingSpeed;
-            
-            // Start shouldering phase when entering ADS with advanced transitions enabled
-            if (justStartedAiming && advancedADSEnabled && isHoldingFirearm)
-            {
-                _isInShoulderingPhase = true;
-                _shoulderingStartTime = Time.time;
-            }
-            
-            // End shouldering phase when no longer aiming or duration exceeded
-            if (!isAiming)
-            {
-                _isInShoulderingPhase = false;
-            }
-            else if (_isInShoulderingPhase)
-            {
-                if (Time.time - _shoulderingStartTime >= throwDuration)
-                {
-                    _isInShoulderingPhase = false;
-                }
-            }
-            
-            // Stance transition shouldering effect
-            bool affectStanceTransition = Plugin._AffectStanceTransitionToo?.Value ?? true;
-            float stanceTransitionIntensity = Plugin._AdvancedStanceTransitionIntensity?.Value ?? 1f;
-            
-            // Calculate stance-specific weapon scaling (uses its own intensity slider)
-            float stanceAimingSpeedMultiplier = affectStanceTransition ? Mathf.LerpUnclamped(1f, rawAimingSpeedMultiplier, stanceTransitionIntensity) : 1f;
-            float stanceInverseAimingSpeed = affectStanceTransition ? Mathf.LerpUnclamped(1f, rawInverseAimingSpeed, stanceTransitionIntensity) : 1f;
-            
-            // Calculate stance-specific throw values
-            float stanceThrowDuration = baseThrowDuration * stanceInverseAimingSpeed;
-            float stanceThrowSpeed = baseThrowSpeed * stanceAimingSpeedMultiplier;
-            float stanceThrowForward = baseThrowForward * stanceInverseAimingSpeed;
-            float stanceThrowUp = baseThrowUp * stanceInverseAimingSpeed;
-            
-            // Get rotation throw config values (shared between ADS and stance)
-            float baseThrowYaw = Plugin._ADSShoulderThrowYaw?.Value ?? 0f;
-            float baseThrowPitch = Plugin._ADSShoulderThrowPitch?.Value ?? 0f;
-            float baseThrowRoll = Plugin._ADSShoulderThrowRoll?.Value ?? 0f;
-            
-            // Calculate ADS rotation throw (scaled by weapon stats)
-            float throwYaw = baseThrowYaw * inverseAimingSpeed;
-            float throwPitch = baseThrowPitch * inverseAimingSpeed;
-            float throwRoll = baseThrowRoll * inverseAimingSpeed;
-            
-            // Calculate stance rotation throw (uses stance intensity slider)
-            float stanceThrowYaw = baseThrowYaw * stanceInverseAimingSpeed;
-            float stanceThrowPitch = baseThrowPitch * stanceInverseAimingSpeed;
-            float stanceThrowRoll = baseThrowRoll * stanceInverseAimingSpeed;
-            
-            // Start stance shouldering phase when changing stances (and not aiming)
-            if (stanceChanged && advancedADSEnabled && affectStanceTransition && isHoldingFirearm && !isAiming)
-            {
-                _isInStanceShoulderingPhase = true;
-                _stanceShoulderingStartTime = Time.time;
-                
-                // Play aiming rattle sound on stance change
-                PlayStanceChangeSound(gameWorld.MainPlayer);
-            }
-            
-            // End stance shouldering phase when duration exceeded or started aiming
-            if (isAiming)
-            {
-                _isInStanceShoulderingPhase = false;
-            }
-            else if (_isInStanceShoulderingPhase)
-            {
-                if (Time.time - _stanceShoulderingStartTime >= stanceThrowDuration)
-                {
-                    _isInStanceShoulderingPhase = false;
-                }
-            }
-            
-            // Update previous stance tracker
-            _previousStance = currentStance;
-            
-            // Calculate transition speed for SmoothDamp
+            // Variables for transition speed and shouldering
             float transitionSpeed;
-            if (_isInShoulderingPhase)
-            {
-                transitionSpeed = throwSpeed;
-            }
-            else if (_isInStanceShoulderingPhase)
-            {
-                transitionSpeed = stanceThrowSpeed;
-            }
-            else if (isAiming && advancedADSEnabled)
-            {
-                transitionSpeed = settleSpeed;
-            }
-            else if (isAiming)
-            {
-                // Non-advanced ADS transition: base speed scaled by weapon stats if enabled
-                float baseADSSpeed = Plugin._ADSTransitionSpeed?.Value ?? 2f;
-                transitionSpeed = scaleByWeaponStats ? (baseADSSpeed * aimingSpeedMultiplier) : baseADSSpeed;
-            }
-            else
-            {
-                // Stance transition: base speed scaled by weapon stats if advanced stance transitions enabled
-                float baseStanceSpeed = Plugin._StanceTransitionSpeed?.Value ?? 1f;
-                transitionSpeed = (advancedADSEnabled && affectStanceTransition) 
-                    ? (baseStanceSpeed * stanceAimingSpeedMultiplier) 
-                    : baseStanceSpeed;
-            }
-            // Convert transition speed to SmoothDamp smoothTime
-            // Higher transitionSpeed = faster approach = lower smoothTime
-            float smoothTime = SpeedToSmoothTime(transitionSpeed);
-            
-            // Apply shouldering offset during throw phase (ADS or stance transition)
             Vector3 shoulderingPositionOffset = Vector3.zero;
             Vector3 shoulderingRotationOffset = Vector3.zero;
             
-            // Get overall throw intensity multipliers
-            float adsThrowIntensity = Plugin._ADSShoulderThrowIntensity?.Value ?? 1f;
-            float stanceThrowIntensity = Plugin._StanceShoulderThrowIntensity?.Value ?? 1f;
+            // If advanced ADS is disabled, use simple transition speeds and skip all shouldering
+            if (!advancedADSEnabled)
+            {
+                // Clear any active shouldering phases
+                _isInShoulderingPhase = false;
+                _isInStanceShoulderingPhase = false;
+                
+                // Simple transition speed - just use base config values
+                if (isAiming)
+                {
+                    transitionSpeed = Plugin._ADSTransitionSpeed?.Value ?? 2f;
+                }
+                else
+                {
+                    transitionSpeed = Plugin._StanceTransitionSpeed?.Value ?? 1f;
+                }
+                
+                // Update previous stance tracker
+                _previousStance = currentStance;
+            }
+            else
+            {
+                // ADVANCED ADS ENABLED - do full calculations
+                bool scaleByWeaponStats = Plugin._ScaleByWeaponStats?.Value ?? true;
+                
+                // Get EFT's calculated AimingSpeed (based on weapon weight + ergonomics)
+                float eftAimingSpeed = pwa.AimingSpeed;
+                float scaleIntensity = Plugin._WeaponStatsScaleIntensity?.Value ?? 1f;
+                
+                // Calculate raw multipliers
+                float rawAimingSpeedMultiplier = eftAimingSpeed;
+                float rawInverseAimingSpeed = 1f / Mathf.Max(eftAimingSpeed, 0.5f);
+                
+                // Lerp between 1 (no effect) and full effect based on intensity
+                float aimingSpeedMultiplier = scaleByWeaponStats ? Mathf.LerpUnclamped(1f, rawAimingSpeedMultiplier, scaleIntensity) : 1f;
+                float inverseAimingSpeed = scaleByWeaponStats ? Mathf.LerpUnclamped(1f, rawInverseAimingSpeed, scaleIntensity) : 1f;
+                
+                // Get base config values
+                float baseThrowDuration = Plugin._ADSShoulderThrowDuration?.Value ?? 0.15f;
+                float baseThrowSpeed = Plugin._ADSShoulderThrowSpeed?.Value ?? 2f;
+                float baseSettleSpeed = Plugin._ADSShoulderSettleSpeed?.Value ?? 1.5f;
+                float baseThrowForward = Plugin._ADSShoulderThrowForward?.Value ?? 0.02f;
+                float baseThrowUp = Plugin._ADSShoulderThrowUp?.Value ?? -0.015f;
+                
+                // Apply weapon stat scaling
+                float throwDuration = baseThrowDuration * inverseAimingSpeed;
+                float throwSpeed = baseThrowSpeed * aimingSpeedMultiplier;
+                float settleSpeed = baseSettleSpeed * aimingSpeedMultiplier;
+                float throwForward = baseThrowForward * inverseAimingSpeed;
+                float throwUp = baseThrowUp * inverseAimingSpeed;
+                
+                // Start shouldering phase when entering ADS
+                if (justStartedAiming && isHoldingFirearm)
+                {
+                    _isInShoulderingPhase = true;
+                    _shoulderingStartTime = Time.time;
+                }
+                
+                // End shouldering phase when no longer aiming or duration exceeded
+                if (!isAiming)
+                {
+                    _isInShoulderingPhase = false;
+                }
+                else if (_isInShoulderingPhase && Time.time - _shoulderingStartTime >= throwDuration)
+                {
+                    _isInShoulderingPhase = false;
+                }
+                
+                // Stance transition shouldering effect
+                bool affectStanceTransition = Plugin._AffectStanceTransitionToo?.Value ?? true;
+                float stanceTransitionIntensity = Plugin._AdvancedStanceTransitionIntensity?.Value ?? 1f;
+                
+                // Calculate stance-specific values only if stance transitions are affected
+                float stanceAimingSpeedMultiplier = 1f;
+                float stanceInverseAimingSpeed = 1f;
+                float stanceThrowDuration = baseThrowDuration;
+                float stanceThrowSpeed = baseThrowSpeed;
+                float stanceThrowForward = baseThrowForward;
+                float stanceThrowUp = baseThrowUp;
+                
+                if (affectStanceTransition)
+                {
+                    stanceAimingSpeedMultiplier = Mathf.LerpUnclamped(1f, rawAimingSpeedMultiplier, stanceTransitionIntensity);
+                    stanceInverseAimingSpeed = Mathf.LerpUnclamped(1f, rawInverseAimingSpeed, stanceTransitionIntensity);
+                    stanceThrowDuration = baseThrowDuration * stanceInverseAimingSpeed;
+                    stanceThrowSpeed = baseThrowSpeed * stanceAimingSpeedMultiplier;
+                    stanceThrowForward = baseThrowForward * stanceInverseAimingSpeed;
+                    stanceThrowUp = baseThrowUp * stanceInverseAimingSpeed;
+                }
+                
+                // Get rotation throw config values (shared between ADS and stance)
+                float baseThrowYaw = Plugin._ADSShoulderThrowYaw?.Value ?? 0f;
+                float baseThrowPitch = Plugin._ADSShoulderThrowPitch?.Value ?? 0f;
+                float baseThrowRoll = Plugin._ADSShoulderThrowRoll?.Value ?? 0f;
+                
+                // Calculate rotation throws
+                float throwYaw = baseThrowYaw * inverseAimingSpeed;
+                float throwPitch = baseThrowPitch * inverseAimingSpeed;
+                float throwRoll = baseThrowRoll * inverseAimingSpeed;
+                float stanceThrowYaw = affectStanceTransition ? baseThrowYaw * stanceInverseAimingSpeed : 0f;
+                float stanceThrowPitch = affectStanceTransition ? baseThrowPitch * stanceInverseAimingSpeed : 0f;
+                float stanceThrowRoll = affectStanceTransition ? baseThrowRoll * stanceInverseAimingSpeed : 0f;
+                
+                // Start stance shouldering phase when changing stances (and not aiming)
+                if (stanceChanged && affectStanceTransition && isHoldingFirearm && !isAiming)
+                {
+                    _isInStanceShoulderingPhase = true;
+                    _stanceShoulderingStartTime = Time.time;
+                    PlayStanceChangeSound(gameWorld.MainPlayer);
+                }
+                
+                // End stance shouldering phase when duration exceeded or started aiming
+                if (isAiming)
+                {
+                    _isInStanceShoulderingPhase = false;
+                }
+                else if (_isInStanceShoulderingPhase && Time.time - _stanceShoulderingStartTime >= stanceThrowDuration)
+                {
+                    _isInStanceShoulderingPhase = false;
+                }
+                
+                // Update previous stance tracker
+                _previousStance = currentStance;
+                
+                // Calculate transition speed
+                if (_isInShoulderingPhase)
+                {
+                    transitionSpeed = throwSpeed;
+                }
+                else if (_isInStanceShoulderingPhase)
+                {
+                    transitionSpeed = stanceThrowSpeed;
+                }
+                else if (isAiming)
+                {
+                    transitionSpeed = settleSpeed;
+                }
+                else
+                {
+                    float baseStanceSpeed = Plugin._StanceTransitionSpeed?.Value ?? 1f;
+                    transitionSpeed = affectStanceTransition ? (baseStanceSpeed * stanceAimingSpeedMultiplier) : baseStanceSpeed;
+                }
+                
+                // Get overall throw intensity multipliers
+                float adsThrowIntensity = Plugin._ADSShoulderThrowIntensity?.Value ?? 1f;
+                float stanceThrowIntensity = Plugin._StanceShoulderThrowIntensity?.Value ?? 1f;
+                
+                // Apply shouldering offsets
+                if (_isInShoulderingPhase)
+                {
+                    shoulderingPositionOffset = new Vector3(0f, throwUp * adsThrowIntensity, throwForward * adsThrowIntensity);
+                    shoulderingRotationOffset = new Vector3(throwPitch * adsThrowIntensity, throwYaw * adsThrowIntensity, throwRoll * adsThrowIntensity);
+                }
+                else if (_isInStanceShoulderingPhase)
+                {
+                    shoulderingPositionOffset = new Vector3(0f, stanceThrowUp * stanceThrowIntensity, stanceThrowForward * stanceThrowIntensity);
+                    shoulderingRotationOffset = new Vector3(stanceThrowPitch * stanceThrowIntensity, stanceThrowYaw * stanceThrowIntensity, stanceThrowRoll * stanceThrowIntensity);
+                }
+            }
             
-            if (_isInShoulderingPhase)
-            {
-                shoulderingPositionOffset = new Vector3(0f, throwUp * adsThrowIntensity, throwForward * adsThrowIntensity);
-                shoulderingRotationOffset = new Vector3(throwPitch * adsThrowIntensity, throwYaw * adsThrowIntensity, throwRoll * adsThrowIntensity);
-            }
-            else if (_isInStanceShoulderingPhase)
-            {
-                // Invert vertical movement for stance transitions (weapon moves closer instead of away)
-                shoulderingPositionOffset = new Vector3(0f, stanceThrowUp * stanceThrowIntensity, stanceThrowForward * stanceThrowIntensity);
-                shoulderingRotationOffset = new Vector3(stanceThrowPitch * stanceThrowIntensity, stanceThrowYaw * stanceThrowIntensity, stanceThrowRoll * stanceThrowIntensity);
-            }
+            // Convert transition speed to SmoothDamp smoothTime
+            float smoothTime = SpeedToSmoothTime(transitionSpeed);
             
             // ALWAYS update targets to match desired state (for real-time slider adjustments)
             _targetRotation = desiredRotation;
             _targetPosition = desiredPosition + shoulderingPositionOffset;
             _targetShoulderingRotation = shoulderingRotationOffset;
             
-            if (stateChanged)
+            // Recompute stateChanged with proper isInStance (includes firearm check)
+            bool stateChangedFull = (isAiming != _wasAiming) || (isInStance != _wasInStance);
+            
+            if (stateChangedFull)
             {
                 // First time initialization - start at target
                 if (!_isInitialized)
@@ -360,6 +397,14 @@ namespace CameraRotationMod.Patches
             {
                 _currentShoulderingRotation = _targetShoulderingRotation;
             }
+            
+            // Track stability for potential early exit optimization in future frames
+            bool atRotationTarget = _currentRotation == _targetRotation;
+            bool atPositionTarget = _currentPosition == _targetPosition;
+            bool atShoulderingTarget = _currentShoulderingRotation == _targetShoulderingRotation;
+            _wasStable = _isStable;
+            _isStable = atRotationTarget && atPositionTarget && atShoulderingTarget && 
+                       !_isInShoulderingPhase && !_isInStanceShoulderingPhase;
 
             // Apply the interpolated values based on which spring this is
             if (isRotationSpring)
