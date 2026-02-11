@@ -93,8 +93,6 @@ Use this to reorganize config sections and order. Edit and send back.
 
 ---
 
-(Make Other Stances like stance 1 too)
-
 ## Section: "Tac Sprint Settings (Advanced)"
 
 | Order | Name | Default | Advanced | Type |
