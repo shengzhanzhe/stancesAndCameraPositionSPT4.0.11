@@ -34,6 +34,36 @@ namespace CameraRotationMod
         
         // Track GameWorld to detect raid changes and reset state
         private static GameWorld _lastGameWorld = null;
+        
+        // Cached GameWorld reference for this frame (avoids multiple Singleton lookups)
+        private static GameWorld _cachedGameWorld = null;
+        private static int _cachedGameWorldFrame = -1;
+        
+        // Cached stance vectors - rebuilt when config changes
+        private static bool _stanceValuesDirty = true;
+        private static Vector3 _cachedADSRotation;
+        private static Vector3 _cachedADSPosition;
+        private static Vector3 _cachedStance1Rotation;
+        private static Vector3 _cachedStance1Position;
+        private static Vector3 _cachedStance2Rotation;
+        private static Vector3 _cachedStance2Position;
+        private static Vector3 _cachedStance3Rotation;
+        private static Vector3 _cachedStance3Position;
+        private static Vector3 _cachedDefaultPosition;
+        
+        // Cached sprint enabled flag - rebuilt when config changes
+        private static bool _sprintEnabledDirty = true;
+        private static bool _cachedAnySprintEnabled = false;
+        
+        /// <summary>
+        /// Mark stance values as needing recalculation (called when config changes)
+        /// </summary>
+        public static void MarkStanceValuesDirty() => _stanceValuesDirty = true;
+        
+        /// <summary>
+        /// Mark sprint enabled flag as needing recalculation (called when sprint config changes)
+        /// </summary>
+        public static void MarkSprintEnabledDirty() => _sprintEnabledDirty = true;
 
         public static void Initialize(ConfigEntry<KeyCode> stanceToggleKeyConfig)
         {
@@ -44,6 +74,14 @@ namespace CameraRotationMod
 
         public static void Update()
         {
+            // Block stance switching while sprinting
+            var gameWorld = GetCachedGameWorld();
+            if (gameWorld?.MainPlayer?.IsSprintEnabled == true)
+            {
+                _wasKeyPressed = UnityEngine.Input.GetKeyDown(_stanceToggleKeyConfig.Value);
+                return;
+            }
+            
             // Check if the stance toggle key is pressed (simple keycode check, works with other keys held)
             bool isKeyPressed = UnityEngine.Input.GetKeyDown(_stanceToggleKeyConfig.Value);
             
@@ -182,7 +220,7 @@ namespace CameraRotationMod
         /// </summary>
         public static bool IsHoldingFirearm()
         {
-            var gameWorld = Singleton<GameWorld>.Instance;
+            var gameWorld = GetCachedGameWorld();
             if (gameWorld?.MainPlayer == null)
                 return false;
             
@@ -190,54 +228,110 @@ namespace CameraRotationMod
             // It will be different controller types for melee, meds, food, grenades, empty hands
             return gameWorld.MainPlayer.HandsController is Player.FirearmController;
         }
+        
+        /// <summary>
+        /// Get cached GameWorld reference to avoid multiple Singleton lookups per frame
+        /// </summary>
+        public static GameWorld GetCachedGameWorld()
+        {
+            int currentFrame = Time.frameCount;
+            if (_cachedGameWorldFrame != currentFrame)
+            {
+                _cachedGameWorld = Singleton<GameWorld>.Instance;
+                _cachedGameWorldFrame = currentFrame;
+            }
+            return _cachedGameWorld;
+        }
+        
+        /// <summary>
+        /// Rebuild cached stance vectors from config values
+        /// </summary>
+        private static void RebuildCachedStanceValues()
+        {
+            if (!_stanceValuesDirty)
+                return;
+                
+            _cachedADSRotation = new Vector3(
+                Plugin._ADSHandsPitchRotation?.Value ?? 0f,
+                Plugin._ADSHandsYawRotation?.Value ?? 0f,
+                Plugin._ADSHandsRollRotation?.Value ?? 0f
+            );
+            
+            _cachedADSPosition = new Vector3(
+                Plugin._ADSHandsSidewaysOffset?.Value ?? 0f,
+                Plugin._ADSHandsUpDownOffset?.Value ?? 0f,
+                Plugin._ADSHandsForwardBackwardOffset?.Value ?? 0f
+            );
+            
+            _cachedStance1Rotation = new Vector3(
+                Plugin._Stance1HandsPitchRotation?.Value ?? 0f,
+                Plugin._Stance1HandsYawRotation?.Value ?? 0f,
+                Plugin._Stance1HandsRollRotation?.Value ?? 0f
+            );
+            
+            _cachedStance1Position = new Vector3(
+                Plugin._Stance1HandsSidewaysOffset?.Value ?? 0f,
+                Plugin._Stance1HandsUpDownOffset?.Value ?? 0f,
+                Plugin._Stance1HandsForwardBackwardOffset?.Value ?? 0f
+            );
+            
+            _cachedStance2Rotation = new Vector3(
+                Plugin._Stance2HandsPitchRotation?.Value ?? 0f,
+                Plugin._Stance2HandsYawRotation?.Value ?? 0f,
+                Plugin._Stance2HandsRollRotation?.Value ?? 0f
+            );
+            
+            _cachedStance2Position = new Vector3(
+                Plugin._Stance2HandsSidewaysOffset?.Value ?? 0f,
+                Plugin._Stance2HandsUpDownOffset?.Value ?? 0f,
+                Plugin._Stance2HandsForwardBackwardOffset?.Value ?? 0f
+            );
+            
+            _cachedStance3Rotation = new Vector3(
+                Plugin._Stance3HandsPitchRotation?.Value ?? 0f,
+                Plugin._Stance3HandsYawRotation?.Value ?? 0f,
+                Plugin._Stance3HandsRollRotation?.Value ?? 0f
+            );
+            
+            _cachedStance3Position = new Vector3(
+                Plugin._Stance3HandsSidewaysOffset?.Value ?? 0f,
+                Plugin._Stance3HandsUpDownOffset?.Value ?? 0f,
+                Plugin._Stance3HandsForwardBackwardOffset?.Value ?? 0f
+            );
+            
+            _cachedDefaultPosition = (Plugin._DefaultHandsPositionEnabled?.Value ?? false)
+                ? new Vector3(
+                    Plugin._DefaultHandsSidewaysOffset?.Value ?? 0f,
+                    Plugin._DefaultHandsUpDownOffset?.Value ?? 0f,
+                    Plugin._DefaultHandsForwardBackwardOffset?.Value ?? 0f
+                )
+                : Vector3.zero;
+            
+            _stanceValuesDirty = false;
+        }
 
         /// <summary>
         /// Get the current target rotation based on stance state and ADS state
         /// </summary>
         public static Vector3 GetTargetRotation(bool isAiming)
         {
+            // Ensure cached values are up to date
+            RebuildCachedStanceValues();
+            
             // If ADS and reset rotation is enabled, return ADS rotation
             if (isAiming && (Plugin._ResetOnADS?.Value ?? false))
             {
-                return new Vector3(
-                    Plugin._ADSHandsPitchRotation.Value,
-                    Plugin._ADSHandsYawRotation.Value,
-                    Plugin._ADSHandsRollRotation.Value
-                );
+                return _cachedADSRotation;
             }
 
-            // If in Stance1 mode, return stance1 rotation
-            if (CurrentStance == Stance.Stance1)
+            // Return cached rotation based on current stance
+            return CurrentStance switch
             {
-                return new Vector3(
-                    Plugin._Stance1HandsPitchRotation.Value,
-                    Plugin._Stance1HandsYawRotation.Value,
-                    Plugin._Stance1HandsRollRotation.Value
-                );
-            }
-
-            // If in Stance2 mode, return stance2 rotation
-            if (CurrentStance == Stance.Stance2)
-            {
-                return new Vector3(
-                    Plugin._Stance2HandsPitchRotation.Value,
-                    Plugin._Stance2HandsYawRotation.Value,
-                    Plugin._Stance2HandsRollRotation.Value
-                );
-            }
-
-            // If in Stance3 mode, return stance3 rotation
-            if (CurrentStance == Stance.Stance3)
-            {
-                return new Vector3(
-                    Plugin._Stance3HandsPitchRotation.Value,
-                    Plugin._Stance3HandsYawRotation.Value,
-                    Plugin._Stance3HandsRollRotation.Value
-                );
-            }
-
-            // Default rotation is always 0,0,0
-            return Vector3.zero;
+                Stance.Stance1 => _cachedStance1Rotation,
+                Stance.Stance2 => _cachedStance2Rotation,
+                Stance.Stance3 => _cachedStance3Rotation,
+                _ => Vector3.zero
+            };
         }
 
         /// <summary>
@@ -245,58 +339,23 @@ namespace CameraRotationMod
         /// </summary>
         public static Vector3 GetTargetPosition(bool isAiming)
         {
+            // Ensure cached values are up to date
+            RebuildCachedStanceValues();
+            
             // If ADS and reset is enabled, return ADS position
             if (isAiming && (Plugin._ResetOnADS?.Value ?? false))
             {
-                return new Vector3(
-                    Plugin._ADSHandsSidewaysOffset.Value,
-                    Plugin._ADSHandsUpDownOffset.Value,
-                    Plugin._ADSHandsForwardBackwardOffset.Value
-                );
+                return _cachedADSPosition;
             }
 
-            // If in Stance1 mode, return stance1 position
-            if (CurrentStance == Stance.Stance1)
+            // Return cached position based on current stance
+            return CurrentStance switch
             {
-                return new Vector3(
-                    Plugin._Stance1HandsSidewaysOffset.Value,
-                    Plugin._Stance1HandsUpDownOffset.Value,
-                    Plugin._Stance1HandsForwardBackwardOffset.Value
-                );
-            }
-
-            // If in Stance2 mode, return stance2 position
-            if (CurrentStance == Stance.Stance2)
-            {
-                return new Vector3(
-                    Plugin._Stance2HandsSidewaysOffset.Value,
-                    Plugin._Stance2HandsUpDownOffset.Value,
-                    Plugin._Stance2HandsForwardBackwardOffset.Value
-                );
-            }
-
-            // If in Stance3 mode, return stance3 position
-            if (CurrentStance == Stance.Stance3)
-            {
-                return new Vector3(
-                    Plugin._Stance3HandsSidewaysOffset.Value,
-                    Plugin._Stance3HandsUpDownOffset.Value,
-                    Plugin._Stance3HandsForwardBackwardOffset.Value
-                );
-            }
-
-            // Return default position
-            if (Plugin._DefaultHandsPositionEnabled.Value)
-            {
-                return new Vector3(
-                    Plugin._DefaultHandsSidewaysOffset.Value,
-                    Plugin._DefaultHandsUpDownOffset.Value,
-                    Plugin._DefaultHandsForwardBackwardOffset.Value
-                );
-            }
-
-            // If nothing enabled, return zero
-            return Vector3.zero;
+                Stance.Stance1 => _cachedStance1Position,
+                Stance.Stance2 => _cachedStance2Position,
+                Stance.Stance3 => _cachedStance3Position,
+                _ => _cachedDefaultPosition
+            };
         }
 
         /// <summary>
@@ -310,6 +369,24 @@ namespace CameraRotationMod
             _lastGameWorld = null;
             _wasKeyPressed = false;
             _lastScrollTime = 0f;
+            _cachedGameWorld = null;
+            _cachedGameWorldFrame = -1;
+            _stanceValuesDirty = true;
+            _sprintEnabledDirty = true;
+        }
+        
+        /// <summary>
+        /// Rebuild cached 'any sprint enabled' flag from config values
+        /// </summary>
+        private static void RebuildCachedSprintEnabled()
+        {
+            if (!_sprintEnabledDirty)
+                return;
+            
+            _cachedAnySprintEnabled = (Plugin._Stance1SprintAnimationEnabled?.Value ?? false) ||
+                                      (Plugin._Stance2SprintAnimationEnabled?.Value ?? false) ||
+                                      (Plugin._Stance3SprintAnimationEnabled?.Value ?? false);
+            _sprintEnabledDirty = false;
         }
         
         /// <summary>
@@ -318,7 +395,16 @@ namespace CameraRotationMod
         /// </summary>
         public static void UpdateTacSprint()
         {
-            var gameWorld = Singleton<GameWorld>.Instance;
+            // Early exit: if no stances have sprint animation enabled, skip all processing
+            // Only check this if tac sprint is not currently active (need to disable it if active)
+            if (!_isTacSprintActive)
+            {
+                RebuildCachedSprintEnabled();
+                if (!_cachedAnySprintEnabled)
+                    return;
+            }
+            
+            var gameWorld = GetCachedGameWorld();
             if (gameWorld?.MainPlayer == null)
             {
                 // Reset state when no player

@@ -120,7 +120,7 @@ Each stance (1, 2, 3) has:
 
 - Stance transition speed modifier affects ADS → stance transition too 
 - Ending tactical sprint causes weapon to warp towards low sprint position (Planned to be fixed next)
-- It's possible to switch stances while running - because of that, if a stance has tactical sprint enabled, the weapon instantly switches to tactical sprint mode
+- ~~It's possible to switch stances while running - because of that, if a stance has tactical sprint enabled, the weapon instantly switches to tactical sprint mode~~ (Fixed by removing ability to switch stances while sprinting)
 - Very Rarely, using very high position/rotation offsets causes shouldering the weapon to take full stamina
 - ~~Rarely, extreme position/rotation offsets may cause the weapon to briefly fly out of hand (2-3 frames) before safeguard logic corrects it~~ Fixed after physics update
 - ~~Add "aim rattle" sound effect when switching stances~~ Implemented with adjustable volume

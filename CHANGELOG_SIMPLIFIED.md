@@ -33,26 +33,32 @@
 ## v1.1.0 (February 2026)
 
 ### Bug Fixes
-- Fixed visual flicker at the end of ADS transitions, particularly noticeable with large stance rotations (e.g., -30 degrees)
-- Resolved conflicting code that interfered with smooth transitions
-
-### Stability Improvements
-- Added bounds checking to prevent extreme visual glitches
-- Clamped physics timestep to maintain stability during frame drops
-- Implemented NaN detection with automatic state reset
+- **Fixed stance switching during sprint**: Blocked ability to switch stances while sprinting to prevent instant tactical sprint mode switching glitches
 
 ### Performance Optimizations
-- Cached configuration values to reduce per-frame overhead
-- Cached GameWorld reference to eliminate redundant lookups
-- Camera offset now updates only when values change
+- **Removed camera throw effect**: Eliminated camera shake/throw feature for performance reasons
+- **Camera offset dirty flag**: Only updates camera offset when config values actually change (via SettingChanged callbacks)
+- **Config value caching**: Stance rotation/position values cached and rebuilt only when settings change
+- **Vector3 caching**: Pre-cached stance Vector3 values in StanceManager to eliminate per-frame allocations
+- **GameWorld per-frame caching**: Single Singleton lookup per frame instead of multiple lookups
+- **SpringGetPatch fast path**: Early exit when spring state is stable (not transitioning), skips all SmoothDamp calculations
+- **Early exit optimizations**: 
+  - Skips Advanced ADS transition logic entirely when feature is disabled
+  - Skips tac sprint checks when no sprint animations are enabled
 
-### Configuration Changes
-- Relocated advanced settings to the Advanced tab (F1 -> Advanced):
-  - Reset on ADS
-  - ADS Transition Speed
-  - Per-stance rotation/position enable toggles
+### Configuration Reorganization
+- Unified stance sections: Each stance (1, 2, 3) now has all its settings (rotation, position, sprint animation) in a single section
+- Added explicit Order values to all config entries for consistent display order in ConfigurationManager
+- Reorganized sections in logical order:
+  1. Positions (camera offsets)
+  2. Settings (stance controls, hotkeys, transitions)
+  3. Advanced ADS Transitions (shouldering effects)
+  4. ADS Default Values (Advanced)
+  5. Default Hands/Arms Positions (Advanced)
+  6. Stance 1 / Stance 2 / Stance 3 (unified per-stance settings)
+  7. Tac Sprint Settings (Advanced)
+  8. Field of View
 
-### Code Cleanup
-- Removed 6 unused patch files
-- Eliminated deprecated code and comments
-- Resolved all compiler warnings
+### Default Value Changes
+- Advanced ADS Transitions now defaults to `false` (was `true`)
+- ADS Transition Speed now defaults to `1` (was `2`)
