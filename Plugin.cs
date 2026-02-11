@@ -232,6 +232,14 @@ public class Plugin : BaseUnityPlugin
             new AcceptableValueRange<float>(0.5f, 5f),
             new ConfigurationManagerAttributes { Order = 56 }));
 
+        _StanceChangeSoundVolume = Config.Bind(
+            Settings,
+            "Stance Change Sound Volume",
+            1f,
+            new ConfigDescription("Volume multiplier for the aim rattle sound when switching stances. 0 = muted, 1 = normal, 2 = louder.",
+            new AcceptableValueRange<float>(0f, 2f),
+            new ConfigurationManagerAttributes { Order = 55 }));
+
         // ========================================
         // ADVANCED ADS TRANSITIONS (Order 55-40)
         // ========================================
@@ -250,14 +258,6 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("When enabled (requires 'Advanced ADS Transitions'), applies the same shouldering effect when switching between stances",
             null,
             new ConfigurationManagerAttributes { IsAdvanced = true, Order = 54 }));
-
-        _StanceChangeSoundVolume = Config.Bind(
-            AdvancedADSSettings,
-            "Stance Change Sound Volume",
-            1f,
-            new ConfigDescription("Volume multiplier for the aim rattle sound when switching stances. 0 = muted, 1 = normal, 2 = louder. Requires 'Affect Stance Transition Too' enabled.",
-            new AcceptableValueRange<float>(0f, 2f),
-            new ConfigurationManagerAttributes { Order = 53 }));
 
         _ADSShoulderThrowIntensity = Config.Bind(
             AdvancedADSSettings,
