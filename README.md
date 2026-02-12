@@ -127,7 +127,7 @@ Each stance (1, 2, 3) has:
 
 ## Compatibility
 
-- **SPT Version**: 4.0.11+
+- **SPT Version**: 4.0 +
 - Compatible with most other mods
 - May conflict with other stance/weapon position mods
 
