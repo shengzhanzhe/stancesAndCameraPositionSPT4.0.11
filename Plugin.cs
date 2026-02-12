@@ -105,6 +105,7 @@ public class Plugin : BaseUnityPlugin
     public static ConfigEntry<float> _TacSprintWeightLimitBullpup;
     public static ConfigEntry<int> _TacSprintLengthLimit;
     public static ConfigEntry<float> _TacSprintErgoLimit;
+    public static ConfigEntry<float> _TacSprintResetDelay;
 
     // FOV Settings
     public static ConfigEntry<bool> _FOVExpandEnabled;
@@ -668,6 +669,14 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Minimum weapon ergonomics to allow tac sprint animation. Default: 35",
             new AcceptableValueRange<float>(0f, 100f),
             new ConfigurationManagerAttributes { IsAdvanced = true, Order = 4 }));
+
+        _TacSprintResetDelay = Config.Bind(
+            TacSprintSettings,
+            "Tac Sprint Reset Delay",
+            0.35f,
+            new ConfigDescription("Delay (seconds) after sprint ends before weapon returns to normal size. 0 = instant. Prevents jarring snap-back.",
+            new AcceptableValueRange<float>(0f, 1f),
+            new ConfigurationManagerAttributes { IsAdvanced = true, Order = 3 }));
 
         // ========================================
         // FIELD OF VIEW (Order 3-1)

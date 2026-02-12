@@ -32,6 +32,10 @@ namespace CameraRotationMod
         private static bool _isTacSprintActive = false;
         private static bool _wasAiming = false;
         
+        // Tac Sprint reset delay variables
+        private static bool _isWaitingToResetTacSprint = false;
+        private static float _tacSprintResetTimer = 0f;
+        
         // Track GameWorld to detect raid changes and reset state
         private static GameWorld _lastGameWorld = null;
         
@@ -366,6 +370,8 @@ namespace CameraRotationMod
             CurrentStance = Stance.Default;
             _isTacSprintActive = false;
             _wasAiming = false;
+            _isWaitingToResetTacSprint = false;
+            _tacSprintResetTimer = 0f;
             _lastGameWorld = null;
             _wasKeyPressed = false;
             _lastScrollTime = 0f;
@@ -397,7 +403,7 @@ namespace CameraRotationMod
         {
             // Early exit: if no stances have sprint animation enabled, skip all processing
             // Only check this if tac sprint is not currently active (need to disable it if active)
-            if (!_isTacSprintActive)
+            if (!_isTacSprintActive && !_isWaitingToResetTacSprint)
             {
                 RebuildCachedSprintEnabled();
                 if (!_cachedAnySprintEnabled)
@@ -417,27 +423,51 @@ namespace CameraRotationMod
             {
                 // Reset but don't change stance preference - user may want to keep their stance
                 _isTacSprintActive = false;
+                _isWaitingToResetTacSprint = false;
+                _tacSprintResetTimer = 0f;
                 _wasAiming = false;
                 _lastGameWorld = gameWorld;
             }
 
             var player = gameWorld.MainPlayer;
             
+            // Handle delayed reset timer
+            if (_isWaitingToResetTacSprint)
+            {
+                _tacSprintResetTimer -= Time.deltaTime;
+                
+                // If player starts sprinting again during delay, cancel the reset
+                if (player.IsSprintEnabled && IsHoldingFirearm() && CanDoTacSprint(player))
+                {
+                    _isWaitingToResetTacSprint = false;
+                    _tacSprintResetTimer = 0f;
+                    _isTacSprintActive = true; // Re-enable without calling EnableTacSprint (already set)
+                    return;
+                }
+                
+                // Timer expired - complete the reset
+                if (_tacSprintResetTimer <= 0f)
+                {
+                    DisableTacSprintImmediate(player);
+                }
+                return;
+            }
+            
             // CRITICAL: If player switched away from firearm (e.g., consumables, melee), 
             // immediately disable tac sprint to prevent stuck animation glitch
             if (_isTacSprintActive && !IsHoldingFirearm())
             {
-                DisableTacSprint(player);
+                DisableTacSprintImmediate(player);
                 return;
             }
             
             // Check if player is aiming - CRITICAL for preventing stuck sprint
             bool isAiming = player.ProceduralWeaponAnimation?.IsAiming ?? false;
             
-            // If we just entered ADS, immediately disable tac sprint
+            // If we just entered ADS, immediately disable tac sprint (no delay)
             if (isAiming && !_wasAiming && _isTacSprintActive)
             {
-                DisableTacSprint(player);
+                DisableTacSprintImmediate(player);
                 _wasAiming = isAiming;
                 return;
             }
@@ -449,7 +479,7 @@ namespace CameraRotationMod
             {
                 if (_isTacSprintActive)
                 {
-                    DisableTacSprint(player);
+                    DisableTacSprintImmediate(player);
                 }
                 return;
             }
@@ -468,7 +498,7 @@ namespace CameraRotationMod
             {
                 if (_isTacSprintActive)
                 {
-                    DisableTacSprint(player);
+                    DisableTacSprintImmediate(player);
                 }
                 return;
             }
@@ -481,10 +511,10 @@ namespace CameraRotationMod
             {
                 EnableTacSprint(player);
             }
-            // State change: disable tac sprint
+            // State change: disable tac sprint (with delay)
             else if (!shouldEnableTacSprint && _isTacSprintActive)
             {
-                DisableTacSprint(player);
+                StartTacSprintReset(player);
             }
         }
 
@@ -501,13 +531,35 @@ namespace CameraRotationMod
         }
 
         /// <summary>
-        /// Disable tac sprint animation - reset to actual weapon size
-        /// Handles both firearm and non-firearm states (consumables, empty hands, etc.)
+        /// Start delayed tac sprint reset - weapon stays in compact position for configured time
         /// </summary>
-        private static void DisableTacSprint(Player player)
+        private static void StartTacSprintReset(Player player)
+        {
+            float delay = Plugin._TacSprintResetDelay?.Value ?? 0.35f;
+            
+            if (delay <= 0f)
+            {
+                // No delay - instant reset
+                DisableTacSprintImmediate(player);
+                return;
+            }
+            
+            // Start the delay timer
+            _isTacSprintActive = false;
+            _isWaitingToResetTacSprint = true;
+            _tacSprintResetTimer = delay;
+        }
+        
+        /// <summary>
+        /// Immediately disable tac sprint animation - reset to actual weapon size
+        /// Used for ADS, weapon swap, and other instant-reset scenarios
+        /// </summary>
+        private static void DisableTacSprintImmediate(Player player)
         {
             // Always mark as inactive first
             _isTacSprintActive = false;
+            _isWaitingToResetTacSprint = false;
+            _tacSprintResetTimer = 0f;
             
             // If holding a firearm, reset to actual weapon size
             if (player.HandsController is Player.FirearmController fc)
