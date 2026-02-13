@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using BepInEx.Configuration;
 using Comfort.Common;
@@ -24,7 +25,6 @@ namespace CameraRotationMod
         private static ConfigEntry<KeyCode> _stanceToggleKeyConfig;
         private static ConfigEntry<bool> _enableMouseWheelCycleConfig;
         private static ConfigEntry<KeyCode> _mouseWheelModifierKeyConfig;
-        private static bool _wasKeyPressed = false;
         private static float _lastScrollTime = 0f;
         private const float ScrollCooldown = 0.15f; // Prevent scroll spam
 
@@ -42,6 +42,11 @@ namespace CameraRotationMod
         // Cached GameWorld reference for this frame (avoids multiple Singleton lookups)
         private static GameWorld _cachedGameWorld = null;
         private static int _cachedGameWorldFrame = -1;
+        
+        // Cached weapon properties - rebuilt when weapon changes
+        private static Player.FirearmController _lastFirearmController = null;
+        private static bool _cachedIsBullpup = false;
+        private static int _cachedWeaponCellSizeX = 1;
         
         // Cached stance vectors - rebuilt when config changes
         private static bool _stanceValuesDirty = true;
@@ -81,21 +86,13 @@ namespace CameraRotationMod
             // Block stance switching while sprinting
             var gameWorld = GetCachedGameWorld();
             if (gameWorld?.MainPlayer?.IsSprintEnabled == true)
-            {
-                _wasKeyPressed = UnityEngine.Input.GetKeyDown(_stanceToggleKeyConfig.Value);
                 return;
-            }
             
-            // Check if the stance toggle key is pressed (simple keycode check, works with other keys held)
-            bool isKeyPressed = UnityEngine.Input.GetKeyDown(_stanceToggleKeyConfig.Value);
-            
-            // Cycle through stances on key press
-            if (isKeyPressed && !_wasKeyPressed)
+            // GetKeyDown already returns true for only one frame, no manual edge-detect needed
+            if (UnityEngine.Input.GetKeyDown(_stanceToggleKeyConfig.Value))
             {
                 CurrentStance = GetNextStance(CurrentStance);
             }
-            
-            _wasKeyPressed = isKeyPressed;
 
             // Mouse wheel cycling
             if (_enableMouseWheelCycleConfig?.Value == true)
@@ -373,12 +370,14 @@ namespace CameraRotationMod
             _isWaitingToResetTacSprint = false;
             _tacSprintResetTimer = 0f;
             _lastGameWorld = null;
-            _wasKeyPressed = false;
             _lastScrollTime = 0f;
             _cachedGameWorld = null;
             _cachedGameWorldFrame = -1;
             _stanceValuesDirty = true;
             _sprintEnabledDirty = true;
+            _lastFirearmController = null;
+            _cachedIsBullpup = false;
+            _cachedWeaponCellSizeX = 1;
         }
         
         /// <summary>
@@ -523,7 +522,7 @@ namespace CameraRotationMod
         /// </summary>
         private static void EnableTacSprint(Player player)
         {
-            if (player.HandsController is Player.FirearmController fc)
+            if (player.HandsController is Player.FirearmController)
             {
                 player.BodyAnimatorCommon.SetFloat(PlayerAnimator.WEAPON_SIZE_MODIFIER_PARAM_HASH, 2f);
                 _isTacSprintActive = true;
@@ -561,12 +560,10 @@ namespace CameraRotationMod
             _isWaitingToResetTacSprint = false;
             _tacSprintResetTimer = 0f;
             
-            // If holding a firearm, reset to actual weapon size
-            if (player.HandsController is Player.FirearmController fc)
+            // If holding a firearm, reset to actual weapon size (use cached cell size)
+            if (player.HandsController is Player.FirearmController)
             {
-                // Get the actual weapon width from its item dimensions
-                float actualWeaponSize = (float)fc.Item.CalculateCellSize().X;
-                player.BodyAnimatorCommon.SetFloat(PlayerAnimator.WEAPON_SIZE_MODIFIER_PARAM_HASH, actualWeaponSize);
+                player.BodyAnimatorCommon.SetFloat(PlayerAnimator.WEAPON_SIZE_MODIFIER_PARAM_HASH, (float)_cachedWeaponCellSizeX);
             }
             else
             {
@@ -579,39 +576,51 @@ namespace CameraRotationMod
         /// <summary>
         /// Check if player meets all conditions for tac sprint animation
         /// </summary>
+        /// <summary>
+        /// Rebuild cached weapon properties when the equipped firearm changes.
+        /// Caches bullpup status and cell size to avoid per-frame string/calc overhead.
+        /// </summary>
+        private static void RebuildCachedWeaponProperties(Player.FirearmController fc)
+        {
+            if (fc == _lastFirearmController)
+                return;
+            
+            _lastFirearmController = fc;
+            
+            var weapon = fc.Item;
+            _cachedWeaponCellSizeX = weapon.CalculateCellSize().X;
+            
+            // Zero-allocation bullpup check using OrdinalIgnoreCase
+            string templateName = weapon.Template.Name;
+            string shortNameKey = weapon.Template.ShortNameLocalizationKey.ToString();
+            
+            _cachedIsBullpup = templateName.IndexOf("bullpup", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                               shortNameKey.IndexOf("aug", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                               shortNameKey.IndexOf("p90", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                               shortNameKey.IndexOf("mdr", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                               shortNameKey.IndexOf("rfb", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+        
         private static bool CanDoTacSprint(Player player)
         {
-            // Must be in stance, sprinting, and holding a firearm
-            if (!IsInStance || !player.IsSprintEnabled || !IsHoldingFirearm())
+            // Must be in stance and sprinting
+            if (!IsInStance || !player.IsSprintEnabled)
                 return false;
 
             if (!(player.HandsController is Player.FirearmController fc))
                 return false;
 
+            // Rebuild cached weapon properties if weapon changed
+            RebuildCachedWeaponProperties(fc);
+            
             var weapon = fc.Item;
             
-            // Get weapon stats
-            float weaponWeight = weapon.TotalWeight;
-            int weaponLength = weapon.CalculateCellSize().X;
-            float weaponErgo = weapon.ErgonomicsTotal;
+            // Use cached values instead of per-frame recalculation
+            float weightLimit = _cachedIsBullpup ? Plugin._TacSprintWeightLimitBullpup.Value : Plugin._TacSprintWeightLimit.Value;
             
-            // Check if weapon is bullpup (template ID contains specific bullpup markers)
-            // Common bullpup weapons: AUG, P90, MDR, RFB, etc.
-            bool isBullpup = weapon.Template.Name.ToLower().Contains("bullpup") ||
-                           weapon.Template.ShortNameLocalizationKey.ToString().ToLower().Contains("aug") ||
-                           weapon.Template.ShortNameLocalizationKey.ToString().ToLower().Contains("p90") ||
-                           weapon.Template.ShortNameLocalizationKey.ToString().ToLower().Contains("mdr") ||
-                           weapon.Template.ShortNameLocalizationKey.ToString().ToLower().Contains("rfb");
-            
-            // Apply weight limit based on bullpup status
-            float weightLimit = isBullpup ? Plugin._TacSprintWeightLimitBullpup.Value : Plugin._TacSprintWeightLimit.Value;
-            
-            // Check all conditions
-            bool passesWeightCheck = weaponWeight <= weightLimit;
-            bool passesLengthCheck = weaponLength <= Plugin._TacSprintLengthLimit.Value;
-            bool passesErgoCheck = weaponErgo > Plugin._TacSprintErgoLimit.Value;
-            
-            return passesWeightCheck && passesLengthCheck && passesErgoCheck;
+            return weapon.TotalWeight <= weightLimit &&
+                   _cachedWeaponCellSizeX <= Plugin._TacSprintLengthLimit.Value &&
+                   weapon.ErgonomicsTotal > Plugin._TacSprintErgoLimit.Value;
         }
     }
 }

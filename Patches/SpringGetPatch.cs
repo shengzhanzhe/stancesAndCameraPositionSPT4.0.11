@@ -51,6 +51,10 @@ namespace CameraRotationMod.Patches
         private static bool _isStable = false;
         private static bool _wasStable = false;
         
+        // Cached spring references to avoid property lookups on every Spring.Get() call
+        private static Spring _cachedHandsRotation = null;
+        private static Spring _cachedHandsPosition = null;
+        
         /// <summary>
         /// Reset all state - called when entering new raid or GameWorld changes
         /// </summary>
@@ -77,6 +81,8 @@ namespace CameraRotationMod.Patches
             _shoulderingRotationVelocity = Vector3.zero;
             _isStable = false;
             _wasStable = false;
+            _cachedHandsRotation = null;
+            _cachedHandsPosition = null;
         }
         
         protected override MethodBase GetTargetMethod()
@@ -99,28 +105,39 @@ namespace CameraRotationMod.Patches
         [PatchPostfix]
         private static void PatchPostfix(Spring __instance, ref Vector3 __result)
         {
+            // FAST early exit: if we have cached spring refs, reject non-hands springs immediately
+            // This avoids GameWorld lookups for the majority of Spring.Get() calls
+            if (_cachedHandsRotation != null && __instance != _cachedHandsRotation && __instance != _cachedHandsPosition)
+                return;
+            
             // Use cached GameWorld from StanceManager to avoid multiple Singleton lookups
             var gameWorld = StanceManager.GetCachedGameWorld();
             if (gameWorld?.MainPlayer?.ProceduralWeaponAnimation?.HandsContainer == null)
                 return;
             
-            // Detect GameWorld change (new raid) and reset spring state
+            // Detect GameWorld change (new raid) and reset ALL state (spring + stance manager)
             if (_lastGameWorld != gameWorld)
             {
                 ResetState();
+                StanceManager.ResetState();
                 _lastGameWorld = gameWorld;
             }
 
             var pwa = gameWorld.MainPlayer.ProceduralWeaponAnimation;
-            var handsRotation = pwa.HandsContainer.HandsRotation;
-            var handsPosition = pwa.HandsContainer.HandsPosition;
+            
+            // Cache the spring references so future calls can early-exit without GameWorld lookup
+            if (_cachedHandsRotation == null)
+            {
+                _cachedHandsRotation = pwa.HandsContainer.HandsRotation;
+                _cachedHandsPosition = pwa.HandsContainer.HandsPosition;
+            }
 
             // Early exit if this spring is not one we care about (hands only, camera handled in PlayerSpringPatch)
-            if (__instance != handsRotation && __instance != handsPosition)
+            if (__instance != _cachedHandsRotation && __instance != _cachedHandsPosition)
                 return;
 
-            bool isRotationSpring = __instance == handsRotation;
-            bool isPositionSpring = __instance == handsPosition;
+            bool isRotationSpring = __instance == _cachedHandsRotation;
+            bool isPositionSpring = __instance == _cachedHandsPosition;
             
             bool isAiming = pwa.IsAiming;
             bool isHoldingFirearm = StanceManager.IsHoldingFirearm();
@@ -128,8 +145,10 @@ namespace CameraRotationMod.Patches
             
             // FAST PATH: If we're stable (at target with no active transitions) and no state changed,
             // we can skip all the expensive calculations and just apply cached values directly
+            // Use firearm-aware isInStance to match the actual transition logic below
+            bool isInStanceFull = isHoldingFirearm && StanceManager.IsInStance;
             bool stateChanged = (isAiming != _wasAiming) || 
-                               (StanceManager.IsInStance != _wasInStance) || 
+                               (isInStanceFull != _wasInStance) || 
                                (currentStance != _previousStance) ||
                                (isHoldingFirearm != _wasHoldingFirearm);
             
@@ -467,5 +486,7 @@ namespace CameraRotationMod.Patches
         }
         
         /// <summary>
+        /// Plays the aim rattle sound effect when switching stances.
+        /// </summary>
     }
 }

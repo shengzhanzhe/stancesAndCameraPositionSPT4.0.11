@@ -778,7 +778,7 @@ public class Plugin : BaseUnityPlugin
         if (!_cameraOffsetDirty)
             return;
             
-        var gameWorld = Comfort.Common.Singleton<EFT.GameWorld>.Instance;
+        var gameWorld = StanceManager.GetCachedGameWorld();
         if (gameWorld?.MainPlayer?.ProceduralWeaponAnimation?.HandsContainer == null)
             return;
             
