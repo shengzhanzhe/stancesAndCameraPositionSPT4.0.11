@@ -21,9 +21,6 @@ namespace CameraRotationMod.Patches
         private static bool _wasHoldingFirearm = false;
         private static bool _isInitialized = false;
         
-        // Track GameWorld to detect raid changes and reset state
-        private static GameWorld _lastGameWorld = null;
-        
         // Advanced ADS Transition (Shouldering) state
         private static bool _isInShoulderingPhase = false;
         private static float _shoulderingStartTime = 0f;
@@ -64,7 +61,6 @@ namespace CameraRotationMod.Patches
             _wasInStance = false;
             _wasHoldingFirearm = false;
             _isInitialized = false;
-            _lastGameWorld = null;
             _isInShoulderingPhase = false;
             _shoulderingStartTime = 0f;
             _isInStanceShoulderingPhase = false;
@@ -135,7 +131,10 @@ namespace CameraRotationMod.Patches
             // Convert: speed 1 → 0.25s, speed 4 → 0.0625s, speed 12 → 0.02s
             return 0.25f / speed;
         }
-        
+
+        /// <summary>
+        /// One-of-a-kind Spring.Get() hack
+        /// </summary>
         [PatchPostfix]
         private static void PatchPostfix(Spring __instance, ref Vector3 __result)
         {
@@ -148,14 +147,6 @@ namespace CameraRotationMod.Patches
             var gameWorld = StanceManager.GetCachedGameWorld();
             if (gameWorld?.MainPlayer?.ProceduralWeaponAnimation?.HandsContainer == null)
                 return;
-            
-            // Detect GameWorld change (new raid) and reset ALL state (spring + stance manager)
-            if (_lastGameWorld != gameWorld)
-            {
-                ResetState();
-                StanceManager.ResetState();
-                _lastGameWorld = gameWorld;
-            }
 
             var pwa = gameWorld.MainPlayer.ProceduralWeaponAnimation;
             
@@ -447,29 +438,12 @@ namespace CameraRotationMod.Patches
             _currentPosition = Vector3.SmoothDamp(_currentPosition, _targetPosition, ref _positionVelocity, smoothTime, Mathf.Infinity, deltaTime);
             _currentShoulderingRotation = Vector3.SmoothDamp(_currentShoulderingRotation, _targetShoulderingRotation, ref _shoulderingRotationVelocity, smoothTime, Mathf.Infinity, deltaTime);
             
-            // When very close to target, snap to target to prevent micro-jitter
-            const float positionSnapThreshold = 0.0001f;  // 0.1mm
-            const float rotationSnapThreshold = 0.01f;    // 0.01 degrees
-            
-            if (Vector3.SqrMagnitude(_currentRotation - _targetRotation) < rotationSnapThreshold * rotationSnapThreshold)
-            {
-                _currentRotation = _targetRotation;
-            }
-            
-            if (Vector3.SqrMagnitude(_currentPosition - _targetPosition) < positionSnapThreshold * positionSnapThreshold)
-            {
-                _currentPosition = _targetPosition;
-            }
-            
-            if (Vector3.SqrMagnitude(_currentShoulderingRotation - _targetShoulderingRotation) < rotationSnapThreshold * rotationSnapThreshold)
-            {
-                _currentShoulderingRotation = _targetShoulderingRotation;
-            }
-            
             // Track stability for potential early exit optimization in future frames
-            bool atRotationTarget = _currentRotation == _targetRotation;
-            bool atPositionTarget = _currentPosition == _targetPosition;
-            bool atShoulderingTarget = _currentShoulderingRotation == _targetShoulderingRotation;
+            // Use small epsilon for approximate comparison since SmoothDamp converges asymptotically
+            const float epsilon = 1e-6f;
+            bool atRotationTarget = (_currentRotation - _targetRotation).sqrMagnitude < epsilon;
+            bool atPositionTarget = (_currentPosition - _targetPosition).sqrMagnitude < epsilon;
+            bool atShoulderingTarget = (_currentShoulderingRotation - _targetShoulderingRotation).sqrMagnitude < epsilon;
             _wasStable = _isStable;
             _isStable = atRotationTarget && atPositionTarget && atShoulderingTarget && 
                        !_isInShoulderingPhase && !_isInStanceShoulderingPhase;

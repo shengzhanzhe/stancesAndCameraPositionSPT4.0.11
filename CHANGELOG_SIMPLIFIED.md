@@ -82,3 +82,10 @@
 - **Fast-path stability**: `isInStanceFull` now includes `isHoldingFirearm` check, matching the actual transition logic
 - **Coupled resets**: GameWorld change now calls both `ResetState()` and `StanceManager.ResetState()` together
 - **Empty XML doc fixed**: `/// <summary>` block now has content
+
+### Transit Bug Fix
+- **`ValidateSpringCache()`**: Added to `SpringGetPatch`, called once per frame from `Plugin.Update()` before anything else. Compares cached Spring references against the current `HandsContainer`'s actual springs. If they don't match (transit, weapon swap, player recreation), the cache is cleared so the fast-exit path doesn't reject new Spring instances.
+
+### Removed
+- **GameWorld change detection in SpringGetPatch**: Removed `_lastGameWorld` field and the `if (_lastGameWorld != gameWorld)` reset block. `ValidateSpringCache()` already handles spring invalidation on transit/raid change.
+- **Snap thresholds**: Removed `positionSnapThreshold`/`rotationSnapThreshold` constants and all three snap-to-target blocks. `SmoothDamp` converges naturally. Updated stability tracking to use approximate comparison (`sqrMagnitude < epsilon`) instead of exact equality.
