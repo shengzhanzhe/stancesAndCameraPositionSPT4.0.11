@@ -767,6 +767,10 @@ public class Plugin : BaseUnityPlugin
     // Update is called every frame by Unity
     public void Update()
     {
+        // Validate spring cache FIRST — detects stale references after transit/weapon swap
+        // so the fast-exit in SpringGetPatch.PatchPostfix doesn't reject new Spring instances
+        SpringGetPatch.ValidateSpringCache();
+        
         StanceManager.Update();
         StanceManager.UpdateTacSprint();
         UpdateCameraOffset();

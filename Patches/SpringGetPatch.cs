@@ -85,6 +85,40 @@ namespace CameraRotationMod.Patches
             _cachedHandsPosition = null;
         }
         
+        /// <summary>
+        /// Validate that cached Spring references still match the current player's HandsContainer.
+        /// Must be called once per frame (from Plugin.Update) BEFORE any Spring.Get() calls,
+        /// so the fast-exit path in PatchPostfix doesn't silently reject new Spring instances
+        /// after transit, weapon swap, or player recreation.
+        /// </summary>
+        public static void ValidateSpringCache()
+        {
+            // Nothing to validate if cache is already empty
+            if (_cachedHandsRotation == null)
+                return;
+            
+            var gameWorld = StanceManager.GetCachedGameWorld();
+            if (gameWorld?.MainPlayer?.ProceduralWeaponAnimation?.HandsContainer == null)
+            {
+                // Player/PWA not available — clear cache so fast-exit won't block new springs
+                _cachedHandsRotation = null;
+                _cachedHandsPosition = null;
+                return;
+            }
+            
+            var container = gameWorld.MainPlayer.ProceduralWeaponAnimation.HandsContainer;
+            
+            // If the actual springs no longer match our cache, invalidate it.
+            // PatchPostfix will re-cache on its next eligible call and detect
+            // any GameWorld change that requires a full ResetState().
+            if (_cachedHandsRotation != container.HandsRotation ||
+                _cachedHandsPosition != container.HandsPosition)
+            {
+                _cachedHandsRotation = null;
+                _cachedHandsPosition = null;
+            }
+        }
+        
         protected override MethodBase GetTargetMethod()
         {
             return AccessTools.Method(typeof(Spring), nameof(Spring.Get));
